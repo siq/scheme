@@ -11,7 +11,8 @@ try:
 except ImportError:
     from cgi import parse_qsl
 
-from mesh.constants import *
+JSON = 'application/json'
+URLENCODED = 'application/x-www-form-urlencoded'
 
 __all__ = ('STANDARD_FORMATS', 'Format', 'Json', 'UrlEncoded')
 
@@ -30,7 +31,7 @@ class Format(object):
         raise NotImplementedError()
 
 class Json(Format):
-    mimetype = JSON
+    mimetype = 'application/json'
     name = 'json'
 
     @classmethod
@@ -42,7 +43,7 @@ class Json(Format):
         return json.loads(value)
 
 class UrlEncoded(Format):
-    mimetype = URLENCODED
+    mimetype = 'application/x-www-form-urlencoded'
     name = 'urlencoded'
 
     STRUCTURE_EXPR = re.compile(r'(?:\{[^{\[\]]*?\})|(?:\[[^{}\[]*?\])')
