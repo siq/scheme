@@ -111,6 +111,12 @@ class Field(object):
     def __deepcopy__(self, memo):
         return self.clone()
 
+    def __getattr__(self, name):
+        try:
+            return super(Field, self).__getattr__(name)
+        except AttributeError:
+            return None
+
     def clone(self, **params):
         """Clones this field by deep copying it. Keyword parameters are applied to the cloned
         field before returning it."""
