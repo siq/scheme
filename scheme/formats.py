@@ -11,13 +11,26 @@ try:
 except ImportError:
     from cgi import parse_qsl
 
-JSON = 'application/json'
-URLENCODED = 'application/x-www-form-urlencoded'
+from scheme.util import construct_all_list
 
-__all__ = ('STANDARD_FORMATS', 'Format', 'Json', 'UrlEncoded')
+class FormatMeta(type):
+    def __new__(metatype, name, bases, namespace):
+        format = type.__new__(metatype, name, bases, namespace)
+        if not format.name:
+            return format
+
+        format.formats[format.name] = format
+        if format.mimetype:
+            format.formats[format.mimetype] = format
+
+        format.formats[format] = format
+        return format
 
 class Format(object):
     """A data format."""
+
+    __metaclass__ = FormatMeta
+    formats = {}
 
     mimetype = None
     name = None
@@ -42,39 +55,24 @@ class Json(Format):
     def unserialize(cls, value):
         return json.loads(value)
 
-class UrlEncoded(Format):
-    mimetype = 'application/x-www-form-urlencoded'
-    name = 'urlencoded'
+class StructuredText(Format):
+    mimetype = 'text/plain'
+    name = 'structuredtext'
 
     STRUCTURE_EXPR = re.compile(r'(?:\{[^{\[\]]*?\})|(?:\[[^{}\[]*?\])')
 
     @classmethod
-    def serialize(cls, content):
-        if not content:
-            return None
-        elif not isinstance(content, dict):
-            raise ValueError(content)
-
-        data = []
-        for name, value in content.iteritems():
-            data.append((name, cls._serialize_content(value)))
-        return urlencode(data)
+    def serialize(cls, value):
+        return cls._serialize_content(value)
 
     @classmethod
-    def unserialize(cls, text):
-        if not text:
-            return None
-        elif not isinstance(text, basestring):
-            raise ValueError(text)
-
-        data = {}
-        for name, value in parse_qsl(text):
-            if '{' in value or '[' in value:
-                value = cls._unserialize_structured_content(value)
-            else:
-                value = cls._unserialize_simple_value(value)
-            data[name] = value
-        return data
+    def unserialize(cls, value):
+        if not isinstance(value, basestring):
+            raise ValueError(value)
+        if value[0] in ('{', '['):
+            return cls._unserialize_structured_value(value)
+        else:
+            return cls._unserialize_simple_value(value)
 
     @classmethod
     def _serialize_content(cls, content):
@@ -130,7 +128,7 @@ class UrlEncoded(Format):
             raise ValueError(value)
 
     @classmethod
-    def _unserialize_structured_content(cls, text):
+    def _unserialize_structured_value(cls, text):
         expr = cls.STRUCTURE_EXPR
         structures = {}
 
@@ -146,11 +144,54 @@ class UrlEncoded(Format):
 
     @classmethod
     def _unserialize_simple_value(cls, value):
-        if value == 'true':
+        candidate = value.lower()
+        if candidate == 'true':
             return True
-        elif value == 'false':
+        elif candidate == 'false':
             return False
         else:
             return value
 
-STANDARD_FORMATS = (Json, UrlEncoded)
+class UrlEncoded(StructuredText):
+    mimetype = 'application/x-www-form-urlencoded'
+    name = 'urlencoded'
+
+    @classmethod
+    def serialize(cls, content):
+        if not isinstance(content, dict):
+            raise ValueError(content)
+
+        data = []
+        for name, value in content.iteritems():
+            data.append((name, cls._serialize_content(value)))
+        return urlencode(data)
+
+    @classmethod
+    def unserialize(cls, content):
+        if not isinstance(content, basestring):
+            raise ValueError(content)
+
+        data = {}
+        for name, value in parse_qsl(content):
+            if value[0] in ('{', '['):
+                value = cls._unserialize_structured_value(value)
+            else:
+                value = cls._unserialize_simple_value(value)
+            data[name] = value
+        return data
+
+class Yaml(Format):
+    mimetype = 'application/x-yaml'
+    name = 'yaml'
+
+    @classmethod
+    def serialize(cls, value):
+        import yaml
+        return yaml.dump(value)
+
+    @classmethod
+    def unserialize(cls, value):
+        import yaml
+        return yaml.load(value)
+
+__all__ = ['Format'] + construct_all_list(locals(), Format)

@@ -4,6 +4,7 @@ from datetime import datetime, date, time
 from time import mktime, strptime
 
 from scheme.exceptions import *
+from scheme.formats import Format
 from scheme.timezone import LOCAL, UTC
 from scheme.util import construct_all_list, minimize_string, pluralize
 
@@ -129,15 +130,18 @@ class Field(object):
 
         return cls(**specification)
 
-    def describe(self, **params):
+    def describe(self, parameters=None, **params):
         """Constructs a serializable description of this field as a dictionary, which will
         contain enough information to reconstruct this field in another context. Any keyword
         parameters are mixed into the description."""
 
         description = {'type': self.type}
         for parameter in self.parameters:
-            value = getattr(self, parameter, None)
-            description[parameter] = value
+            description[parameter] = getattr(self, parameter, None)
+        
+        if parameters:
+            for parameter in parameters:
+                description[parameter] = getattr(self, parameter, None)
 
         description.update(params)
         return description
@@ -189,7 +193,6 @@ class Field(object):
     
         if self._is_null(value):
             return None
-
         if serialized and phase == INCOMING:
             value = self._unserialize_value(value)
 
@@ -200,6 +203,17 @@ class Field(object):
         if serialized and phase == OUTGOING:
             value = self._serialize_value(value)
         return value
+
+    def serialize(self, value, format=None):
+        value = self.process(value, OUTGOING, True)
+        if format:
+            value = Format.formats[format].serialize(value)
+        return value
+
+    def unserialize(self, value, format=None):
+        if format:
+            value = Format.formats[format].unserialize(value)
+        return self.process(value, INCOMING, True)
 
     def _is_null(self, value):
         if value is None:
@@ -550,8 +564,8 @@ class Map(Field):
         specification['value'] = Field.reconstruct(specification['value'])
         return super(Map, cls).construct(specification)
 
-    def describe(self):
-        return super(Map, self).describe(value=self.value.describe())
+    def describe(self, parameters=None):
+        return super(Map, self).describe(parameters, value=self.value.describe(parameters))
 
     def extract(self, subject):
         definition = self.value
@@ -674,8 +688,8 @@ class Sequence(Field):
         specification['item'] = Field.reconstruct(specification['item'])
         return super(Sequence, cls).construct(specification)
 
-    def describe(self):
-        return super(Sequence, self).describe(item=self.item.describe())
+    def describe(self, parameters=None):
+        return super(Sequence, self).describe(parameters, item=self.item.describe(parameters))
 
     def extract(self, subject):
         definition = self.item
@@ -769,9 +783,10 @@ class Structure(Field):
             structure[name] = Field.reconstruct(field)
         return super(Structure, cls).construct(specification)
 
-    def describe(self):
-        structure = dict((name, field.describe()) for name, field in self.structure.iteritems())
-        return super(Structure, self).describe(structure=structure)
+    def describe(self, parameters=None):
+        structure = dict((name, field.describe(parameters))
+            for name, field in self.structure.iteritems())
+        return super(Structure, self).describe(parameters, structure=structure)
 
     def extract(self, subject):
         extraction = {}
@@ -873,12 +888,12 @@ class Text(Field):
         else:
             raise SchemeError('TextField.max_length must be an integer >= 0, if specified')
 
-    def describe(self):
+    def describe(self, parameters=None):
         if self.pattern:
             pattern = repr(self.pattern.pattern)
         else:
             pattern = None
-        return super(Text, self).describe(pattern=pattern)
+        return super(Text, self).describe(parameters, pattern=pattern)
 
     def _validate_value(self, value):
         if not isinstance(value, basestring):
@@ -981,8 +996,9 @@ class Tuple(Field):
         specification['values'] = tuple(Field.reconstruct(field) for field in specification['values'])
         return super(Tuple, cls).construct(specification)
 
-    def describe(self):
-        return super(Tuple, self).describe(values=[value.describe() for value in self.values])
+    def describe(self, parameters=None):
+        return super(Tuple, self).describe(parameters,
+            values=[value.describe(parameters) for value in self.values])
 
     def extract(self, subject):
         extraction = []
@@ -1044,8 +1060,9 @@ class Union(Field):
         specification['fields'] = tuple(Field.reconstruct(field) for field in specification['fields'])
         return super(Union, cls).construct(specification)
 
-    def describe(self):
-        return super(Union, self).describe(fields=[field.describe() for field in self.fields])
+    def describe(self, parameters=None):
+        return super(Union, self).describe(parameters,
+            fields=[field.describe(parameters) for field in self.fields])
 
     def process(self, value, phase, serialized=False):
         if self._is_null(value):

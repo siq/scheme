@@ -3,21 +3,52 @@ from urllib import unquote
 
 from scheme.formats import *
 
-class FormatTestCase(TestCase):
+class TestStructuredText(TestCase):
+    def assert_correct(self, pairs):
+        for unserialized, serialized in pairs:
+            self.assertEqual(StructuredText.serialize(unserialized), serialized)
+            self.assertEqual(StructuredText.unserialize(serialized), unserialized)
+
+    def test_booleans(self):
+        self.assert_correct([
+            (True, 'true'),
+            (False, 'false'),
+        ])
+        self.assertEqual(StructuredText.unserialize('True'), True)
+        self.assertEqual(StructuredText.unserialize('False'), False)
+
+    def test_mappings(self):
+        self.assert_correct([
+            ({}, '{}'),
+            ({'b': '1'}, '{b:1}'),
+            ({'b': '1', 'c': '2'}, '{b:1,c:2}'),
+            ({'b': True}, '{b:true}'),
+        ])
+
+    def test_sequences(self):
+        self.assert_correct([
+            ([], '[]'),
+            (['1'], '[1]'),
+            (['1', '2'], '[1,2]'),
+            ([True, False], '[true,false]'),
+        ])
+
+    def test_nested_structures(self):
+        self.assert_correct([
+            ({'b': {}}, '{b:{}}'),
+            (['1', '2', ['3', []]], '[1,2,[3,[]]]'),
+            ([True, {'b': [False, '1']}], '[true,{b:[false,1]}]'),
+        ])
+
+class TestUrlEncoded(TestCase):
     def assert_correct(self, pairs):
         for unserialized, serialized in pairs:
             self.assertEqual(unquote(UrlEncoded.serialize(unserialized)), serialized)
             self.assertEqual(UrlEncoded.unserialize(serialized), unserialized)
 
-class TestUrlEncoded(FormatTestCase):
-    def test_nulls(self):
-        for value in (None, ''):
-            self.assertIs(UrlEncoded.serialize(value), None)
-            self.assertIs(UrlEncoded.unserialize(value), None)
-
     def test_invalid_data(self):
-        self.assertRaises(ValueError, lambda:UrlEncoded.serialize(True))
-        self.assertRaises(ValueError, lambda:UrlEncoded.unserialize(True))
+        self.assertRaises(ValueError, lambda: UrlEncoded.serialize(True))
+        self.assertRaises(ValueError, lambda: UrlEncoded.unserialize(True))
 
     def test_booleans(self):
         self.assert_correct([
