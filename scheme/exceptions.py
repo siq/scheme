@@ -1,7 +1,7 @@
-from scheme.util import construct_all_list
+__all__ = ('SchemeError', 'StructuralError', 'ValidationError')
 
 class SchemeError(Exception):
-    """..."""
+    """A scheme error."""
 
 class StructuralError(SchemeError):
     """A structural error."""
@@ -90,5 +90,3 @@ class ValidationError(StructuralError):
             return self.append({'token': error, 'message': message % params})
         else:
             raise KeyError(error)
-
-__all__ = construct_all_list(locals(), Exception)

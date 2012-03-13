@@ -1,4 +1,3 @@
-import logging
 import re
 from types import ClassType
 
@@ -9,41 +8,8 @@ def construct_all_list(namespace, cls):
             all.append(name)
     return all
 
-def identify_class(cls):
-    return '%s.%s' % (cls.__module__, cls.__name__)
-
-def import_object(path, ignore_errors=False):
-    try:
-        module, attr = path.rsplit('.', 1)
-        return getattr(__import__(module, None, None, (attr,)), attr)
-    except Exception:
-        if not ignore_errors:
-            raise
-
-class LogHelper(object):
-    LEVELS = {
-        'debug': logging.DEBUG,
-        'info': logging.INFO,
-        'warning': logging.WARNING,
-        'error': logging.ERROR,
-        'critical': logging.CRITICAL,
-    }
-
-    def __init__(self, logger):
-        self.logger = logger
-
-    def __call__(self, level, message, *args):
-        self.logger.log(self.LEVELS[level], message, *args)
-
 def minimize_string(value):
     return re.sub(r'\s+', ' ', value).strip(' ')
-
-def pull_class_dict(cls, attrs=None):
-    result = {}
-    for key, value in cls.__dict__.iteritems():
-        if (not attrs or key in attrs) and not key.startswith('__'):
-            result[key] = value
-    return result
 
 PLURALIZATION_RULES = (
     (re.compile(r'ife$'), re.compile(r'ife$'), 'ives'),
@@ -63,13 +29,6 @@ def pluralize(word, quantity=None, rules=PLURALIZATION_RULES):
             return target.sub(replacement, word)
     else:
         return word + 's'
-
-def set_function_attr(function, attr, value):
-    try:
-        function = function.im_func
-    except AttributeError:
-        pass
-    setattr(function, attr, value)
 
 class StructureFormatter(object):
     def __init__(self, indent=4):
@@ -133,27 +92,3 @@ class StructureFormatter(object):
             return self._format_long_string(value, level)
         else:
             return repr(value)
-
-def subclass_registry(collection, *attrs):
-    """Metaclass constructor which maintains a registry of subclasses."""
-
-    class registry(type):
-        def __new__(metatype, name, bases, namespace):
-            implementation = type.__new__(metatype, name, bases, namespace)
-            subclasses = getattr(implementation, collection)
-
-            identifier = None
-            if attrs:
-                for attr in attrs:
-                    identifier = getattr(implementation, attr, None)
-                    if identifier:
-                        subclasses[identifier] = implementation
-            else:
-                module = namespace.get('__module__')
-                if module and module != '__main__':
-                    identifier = '%s.%s' % (module, name)
-                if identifier:
-                    subclasses[identifier] = implementation
-
-            return implementation
-    return registry
