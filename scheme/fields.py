@@ -8,7 +8,7 @@ from scheme.formats import Format
 from scheme.timezone import LOCAL, UTC
 from scheme.util import construct_all_list, minimize_string, pluralize
 
-NATIVELY_SERIALIZABLE = (basestring, bool, float, int, long, type(None))
+NATIVELY_SERIALIZABLE = (basestring, bool, float, int, long, type(None), dict, list, tuple)
 PATTERN_TYPE = type(re.compile(''))
 
 INCOMING = 'incoming'
@@ -93,17 +93,18 @@ class Field(object):
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
         errors=None, notes=None, type=None, **params):
 
-        if params:
-            self.__dict__.update(params)
-            self.parameters = tuple(set(self.parameters) | set(params.keys()))
-
         self.default = default
         self.description = description
-        self.instance_errors = errors or {}
         self.name = name
         self.notes = notes
         self.nonnull = nonnull
         self.required = required
+
+        if errors:
+            self.errors = self.errors.copy()
+            self.errors.update(errors)
+        if params:
+            self.__dict__.update(params)
     
     def __repr__(self):
         return '%s(%r)' % (type(self).__name__, self.name)
@@ -141,13 +142,16 @@ class Field(object):
         contain enough information to reconstruct this field in another context. Any keyword
         parameters are mixed into the description."""
 
+        if 'parameters' in self.parameters:
+            print self
+
         description = {'type': self.type}
-        for parameter in self.parameters:
-            description[parameter] = getattr(self, parameter, None)
-        
-        if parameters:
-            for parameter in parameters:
-                description[parameter] = getattr(self, parameter, None)
+        for source in (self.parameters, parameters):
+            if source:
+                for parameter in source:
+                    value = getattr(self, parameter, None)
+                    if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
+                        description[parameter] = value
 
         description.update(params)
         return description
@@ -181,7 +185,7 @@ class Field(object):
         return default
 
     def get_error(self, error):
-        return self.instance_errors.get(error) or self.errors.get(error)
+        return self.errors.get(error)
 
     def process(self, value, phase, serialized=False):
         """Processes ``value`` for this field.
@@ -221,6 +225,10 @@ class Field(object):
             value = Format.formats[format].unserialize(value)
         return self.process(value, INCOMING, True)
 
+    @classmethod
+    def visit(cls, specification, callback):
+        return cls.types[specification['type']]._visit_field(specification, callback)
+
     def _is_null(self, value):
         if value is None:
             if self.nonnull:
@@ -240,6 +248,10 @@ class Field(object):
         """Validates ``value`` according to the parameters of this field."""
 
         return value
+
+    @classmethod
+    def _visit_field(cls, specification, callback):
+        return {}
 
 class Boolean(Field):
     """A resource field for ``boolean`` values."""
@@ -613,6 +625,10 @@ class Map(Field):
         else:
             raise ValidationError(value=value, structure=map)
 
+    @classmethod
+    def _visit_field(cls, specification, callback):
+        return {'value': callback(specification['value'])}
+
 class Recursive(Field):
     """A resource field which contains a recursive structure.
 
@@ -749,6 +765,10 @@ class Sequence(Field):
         else:
             raise ValidationError(value=value, structure=sequence)
 
+    @classmethod
+    def _visit_field(cls, specification, callback):
+        return {'item': callback(specification['item'])}
+
 class Structure(Field):
     """A resource field for structures of key/value pairs.
 
@@ -854,6 +874,11 @@ class Structure(Field):
             return structure
         else:
             raise ValidationError(value=value, structure=structure)
+    
+    @classmethod
+    def _visit_field(cls, specification, callback):
+        return {'structure': dict((name, callback(field))
+            for name, field in specification['structure'].iteritems())}
 
 class Text(Field):
     """A resource field for text values.
@@ -1040,6 +1065,10 @@ class Tuple(Field):
         else:
             raise ValidationError(value=value, structure=sequence)
 
+    @classmethod
+    def _visit_field(cls, specification, callback):
+        return {'values': tuple([callback(field) for field in specification['values']])}
+
 class Union(Field):
     """A resource field that supports multiple field values.
 
@@ -1081,6 +1110,10 @@ class Union(Field):
                 pass
         else:
             raise InvalidTypeError(value=value).construct(self, 'invalid')
+
+    @classmethod
+    def _visit_field(cls, specification, callback):
+        return {'fields': tuple([callback(field) for field in specification['fields']])}
 
 Errors = Tuple((
     Sequence(
