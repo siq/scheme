@@ -4,7 +4,7 @@ from urllib import urlencode
 try:
     import json
 except ImportError:
-    import simplejson as json
+    from scheme import json
 
 try:
     from urlparse import parse_qsl
