@@ -87,12 +87,14 @@ class Field(object):
         'invalid': '%(field)s has an invalid value',
         'nonnull': '%(field)s must be a non-null value',
     }
-    parameters = ('name', 'description', 'default', 'nonnull', 'required', 'notes', 'structural')
+    parameters = ('name', 'constant', 'description', 'default', 'nonnull',
+        'required', 'notes', 'structural')
     structural = False
 
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
-        errors=None, notes=None, type=None, **params):
+        constant=None, errors=None, notes=None, type=None, **params):
 
+        self.constant = constant
         self.default = default
         self.description = description
         self.name = name
@@ -205,6 +207,8 @@ class Field(object):
             return None
         if serialized and phase == INCOMING:
             value = self._unserialize_value(value)
+        if self.constant is not None and value != self.constant:
+            raise InvalidTypeError(value=value).construct(self, 'invalid')
 
         candidate = self._validate_value(value)
         if candidate is not None:
@@ -261,27 +265,6 @@ class Boolean(Field):
     def _validate_value(self, value):
         if not isinstance(value, bool):
             raise InvalidTypeError(value=value).construct(self, 'invalid')
-
-class Constant(Field):
-    """A resource field for constant values.
-
-    :param value: The constant value for this field; must be a natively serializable
-        value (i.e., a ``bool``, ``float``, ``integer``, or ``string``).
-    """
-
-    errors = {'invalid': '%(field)s must be %(constant)r'}
-    parameters = ('value',)
-
-    def __init__(self, value, **params):
-        super(Constant, self).__init__(**params)
-        if isinstance(value, NATIVELY_SERIALIZABLE):
-            self.value = value
-        else:
-            raise SchemeError('Constant.value must be natively serializable')
-
-    def _validate_value(self, value):
-        if value != self.value:
-            raise InvalidTypeError(value=value).construct(self, 'invalid', constant=self.value)
 
 class Date(Field):
     """A resource field for ``date`` values.

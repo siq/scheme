@@ -160,14 +160,10 @@ class TestBoolean(FieldTestCase):
         self.assert_processed(field, None, True, False)
         self.assert_not_processed(field, 'invalid', '')
 
-class TestConstant(FieldTestCase):
-    def test_specification(self):
-        self.assertRaises(SchemeError, lambda:Constant(datetime.now()))
-
-    def test_processing(self):
-        field = Constant('constant')
-        self.assert_processed(field, None, 'constant')
-        self.assert_not_processed(field, 'invalid', '')
+    def test_constants(self):
+        field = Boolean(constant=True)
+        self.assert_processed(field, True)
+        self.assert_not_processed(field, 'invalid', False, '')
 
 class TestDate(FieldTestCase):
     def test_processing(self):
@@ -253,6 +249,11 @@ class TestFloat(FieldTestCase):
         self.assert_not_processed(field, 'minimum', -2.0, -1.1)
         self.assert_not_processed(field, 'maximum', 1.1, 2.0)
 
+    def test_constants(self):
+        field = Float(constant=1.1)
+        self.assert_processed(field, 1.1)
+        self.assert_not_processed(field, 'invalid', 1.0, 1.2, '')
+
 class TestInteger(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Integer(minimum='bad'))
@@ -278,6 +279,11 @@ class TestInteger(FieldTestCase):
         self.assert_processed(field, -2, -1, 0, 1, 2)
         self.assert_not_processed(field, 'minimum', -4, -3)
         self.assert_not_processed(field, 'maximum', 4, 5)
+
+    def test_constants(self):
+        field = Integer(constant=1)
+        self.assert_processed(field, 1)
+        self.assert_not_processed(field, 'invalid', 0, 2, '')
 
 class TestMap(FieldTestCase):
     def test_specification(self):
@@ -469,6 +475,11 @@ class TestText(FieldTestCase):
         field = Text(max_length=2)
         self.assert_processed(field, '', 'a', 'aa')
         self.assert_not_processed(field, 'max_length', 'aaa')
+
+    def test_constants(self):
+        field = Text(constant='a')
+        self.assert_processed(field, 'a')
+        self.assert_not_processed(field, 'invalid', '', 'b', 1)
 
 class TestTime(FieldTestCase):
     def construct(self, delta=None):
