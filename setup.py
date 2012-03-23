@@ -8,7 +8,7 @@ setup(
     author_email='mccoy.jordan@gmail.com',
     license='BSD',
     url='http://github.com/siq/scheme',
-    packages=['scheme'],
+    packages=['scheme', 'scheme.json'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
