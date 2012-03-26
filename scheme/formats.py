@@ -19,6 +19,11 @@ class FormatMeta(type):
         if not format.name:
             return format
 
+        if format.extensions:
+            for extension in format.extensions:
+                if extension[0] == '.':
+                    format.formats[extension] = format
+
         format.formats[format.name] = format
         if format.mimetype:
             format.formats[format.mimetype] = format
@@ -32,6 +37,7 @@ class Format(object):
     __metaclass__ = FormatMeta
     formats = {}
 
+    extensions = None
     mimetype = None
     name = None
 
@@ -44,6 +50,7 @@ class Format(object):
         raise NotImplementedError()
 
 class Json(Format):
+    extensions = ['.json']
     mimetype = 'application/json'
     name = 'json'
 
@@ -181,6 +188,7 @@ class UrlEncoded(StructuredText):
         return data
 
 class Yaml(Format):
+    extensions = ['.yaml']
     mimetype = 'application/x-yaml'
     name = 'yaml'
 

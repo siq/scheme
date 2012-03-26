@@ -1,3 +1,4 @@
+import os
 import re
 from copy import deepcopy
 from datetime import datetime, date, time
@@ -218,6 +219,20 @@ class Field(object):
             value = self._serialize_value(value)
         return value
 
+    def read(self, path):
+        extension = os.path.splitext(path)[-1].lower()
+        if extension not in Format.formats:
+            raise Exception()
+
+        openfile = open(path)
+        try:
+            data = openfile.read()
+        finally:
+            openfile.close()
+
+        value = Format.formats[extension].unserialize(data)
+        return self.process(value, INCOMING, True)
+
     def serialize(self, value, format=None):
         value = self.process(value, OUTGOING, True)
         if format:
@@ -232,6 +247,16 @@ class Field(object):
     @classmethod
     def visit(cls, specification, callback):
         return cls.types[specification['type']]._visit_field(specification, callback)
+
+    def write(self, path, value, format=None):
+        if not format:
+            format = os.path.splitext(path)[-1].lower()
+
+        openfile = open(path, 'w+')
+        try:
+            openfile.write(self.serialize(value, format))
+        finally:
+            openfile.close()
 
     def _is_null(self, value):
         if value is None:
