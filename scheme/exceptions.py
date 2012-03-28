@@ -1,4 +1,4 @@
-__all__ = ('SchemeError', 'StructuralError', 'ValidationError')
+__all__ = ('InvalidTypeError', 'SchemeError', 'StructuralError', 'ValidationError')
 
 class SchemeError(Exception):
     """A scheme error."""
@@ -90,3 +90,7 @@ class ValidationError(StructuralError):
             return self.append({'token': error, 'message': message % params})
         else:
             raise KeyError(error)
+
+class InvalidTypeError(ValidationError):
+    """A validation error indicating the value being processed is invalid due
+    to its type."""
