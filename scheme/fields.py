@@ -15,10 +15,6 @@ PATTERN_TYPE = type(re.compile(''))
 INCOMING = 'incoming'
 OUTGOING = 'outgoing'
 
-class InvalidTypeError(ValidationError):
-    """A validation error indicating the value being processed is invalid due
-    to its type."""
-
 class FieldMeta(type):
     def __new__(metatype, name, bases, namespace):
         declared_errors = namespace.pop('errors', {})
@@ -51,7 +47,7 @@ class FieldMeta(type):
         """Reconstructs the field described by ``specification``."""
 
         if specification is not None:
-            return field.types[specification['type']].construct(specification)
+            return field.types[specification['__type__']].construct(specification)
 
 class Field(object):
     """A resource field.
@@ -93,7 +89,7 @@ class Field(object):
     structural = False
 
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
-        constant=None, errors=None, notes=None, type=None, **params):
+        constant=None, errors=None, notes=None, **params):
 
         self.constant = constant
         self.default = default
@@ -106,8 +102,9 @@ class Field(object):
         if errors:
             self.errors = self.errors.copy()
             self.errors.update(errors)
-        if params:
-            self.__dict__.update(params)
+        for attr, value in params.iteritems():
+            if attr[0] != '_':
+                setattr(self, attr, value)
     
     def __repr__(self):
         return '%s(%r)' % (type(self).__name__, self.name)
@@ -148,7 +145,7 @@ class Field(object):
         if 'parameters' in self.parameters:
             print self
 
-        description = {'type': self.type}
+        description = {'__type__': self.type}
         for source in (self.parameters, parameters):
             if source:
                 for parameter in source:
@@ -246,7 +243,7 @@ class Field(object):
 
     @classmethod
     def visit(cls, specification, callback):
-        return cls.types[specification['type']]._visit_field(specification, callback)
+        return cls.types[specification['__type__']]._visit_field(specification, callback)
 
     def write(self, path, value, format=None):
         if not format:
