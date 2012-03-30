@@ -40,6 +40,10 @@ class TestStructuredText(TestCase):
             ([True, {'b': [False, '1']}], '[true,{b:[false,1]}]'),
         ])
 
+    def test_parsing_numbers(self):
+        self.assertEqual(StructuredText.unserialize('1', True), 1)
+        self.assertEqual(StructuredText.unserialize('{b:1.2}', True), {'b': 1.2})
+
 class TestUrlEncoded(TestCase):
     def assert_correct(self, pairs):
         for unserialized, serialized in pairs:

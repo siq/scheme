@@ -216,7 +216,7 @@ class Field(object):
             value = self._serialize_value(value)
         return value
 
-    def read(self, path):
+    def read(self, path, **params):
         extension = os.path.splitext(path)[-1].lower()
         if extension not in Format.formats:
             raise Exception()
@@ -227,31 +227,31 @@ class Field(object):
         finally:
             openfile.close()
 
-        value = Format.formats[extension].unserialize(data)
+        value = Format.formats[extension].unserialize(data, **params)
         return self.process(value, INCOMING, True)
 
-    def serialize(self, value, format=None):
+    def serialize(self, value, format=None, **params):
         value = self.process(value, OUTGOING, True)
         if format:
-            value = Format.formats[format].serialize(value)
+            value = Format.formats[format].serialize(value, **params)
         return value
 
-    def unserialize(self, value, format=None):
+    def unserialize(self, value, format=None, **params):
         if format:
-            value = Format.formats[format].unserialize(value)
+            value = Format.formats[format].unserialize(value, **params)
         return self.process(value, INCOMING, True)
 
     @classmethod
     def visit(cls, specification, callback):
         return cls.types[specification['__type__']]._visit_field(specification, callback)
 
-    def write(self, path, value, format=None):
+    def write(self, path, value, format=None, **params):
         if not format:
             format = os.path.splitext(path)[-1].lower()
 
         openfile = open(path, 'w+')
         try:
-            openfile.write(self.serialize(value, format))
+            openfile.write(self.serialize(value, format, **params))
         finally:
             openfile.close()
 

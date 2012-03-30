@@ -73,13 +73,13 @@ class StructuredText(Format):
         return cls._serialize_content(value)
 
     @classmethod
-    def unserialize(cls, value):
+    def unserialize(cls, value, parse_numbers=False):
         if not isinstance(value, basestring):
             raise ValueError(value)
         if value[0] in ('{', '['):
-            return cls._unserialize_structured_value(value)
+            return cls._unserialize_structured_value(value, parse_numbers)
         else:
-            return cls._unserialize_simple_value(value)
+            return cls._unserialize_simple_value(value, parse_numbers)
 
     @classmethod
     def _serialize_content(cls, content):
@@ -99,7 +99,7 @@ class StructuredText(Format):
             return str(content)
 
     @classmethod
-    def _unserialize_structure(cls, text, structures):
+    def _unserialize_structure(cls, text, structures, parse_numbers=False):
         head, tail = text[0], text[-1]
         if head == '{' and tail == '}':
             tokens = text[1:-1]
@@ -111,7 +111,7 @@ class StructuredText(Format):
                         if value in structures:
                             value = structures[value]
                         else:
-                            value = cls._unserialize_simple_value(value)
+                            value = cls._unserialize_simple_value(value, parse_numbers)
                         pairs.append((key, value))
                     return dict(pairs)
                 except Exception:
@@ -126,7 +126,7 @@ class StructuredText(Format):
                     if value in structures:
                         value = structures[value]
                     else:
-                        value = cls._unserialize_simple_value(value)
+                        value = cls._unserialize_simple_value(value, parse_numbers)
                     values.append(value)
                 return values
             else:
@@ -135,13 +135,13 @@ class StructuredText(Format):
             raise ValueError(value)
 
     @classmethod
-    def _unserialize_structured_value(cls, text):
+    def _unserialize_structured_value(cls, text, parse_numbers=False):
         expr = cls.STRUCTURE_EXPR
         structures = {}
 
         def replace(match):
             token = '||%d||' % len(structures)
-            structures[token] = cls._unserialize_structure(match.group(0), structures)
+            structures[token] = cls._unserialize_structure(match.group(0), structures, parse_numbers)
             return token
             
         while True:
@@ -150,13 +150,24 @@ class StructuredText(Format):
                 return structures[text]
 
     @classmethod
-    def _unserialize_simple_value(cls, value):
+    def _unserialize_simple_value(cls, value, parse_numbers=False):
         candidate = value.lower()
         if candidate == 'true':
             return True
         elif candidate == 'false':
             return False
-        else:
+        elif not parse_numbers:
+            return value
+
+        if '.' in value:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                pass
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
             return value
 
 class UrlEncoded(StructuredText):
