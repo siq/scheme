@@ -217,17 +217,7 @@ class Field(object):
         return value
 
     def read(self, path, **params):
-        extension = os.path.splitext(path)[-1].lower()
-        if extension not in Format.formats:
-            raise Exception()
-
-        openfile = open(path)
-        try:
-            data = openfile.read()
-        finally:
-            openfile.close()
-
-        value = Format.formats[extension].unserialize(data, **params)
+        data = Format.read(path, **params)
         return self.process(value, INCOMING, True)
 
     def serialize(self, value, format=None, **params):
@@ -246,14 +236,8 @@ class Field(object):
         return cls.types[specification['__type__']]._visit_field(specification, callback)
 
     def write(self, path, value, format=None, **params):
-        if not format:
-            format = os.path.splitext(path)[-1].lower()
-
-        openfile = open(path, 'w+')
-        try:
-            openfile.write(self.serialize(value, format, **params))
-        finally:
-            openfile.close()
+        value = self.process(value, OUTGOING, True)
+        Format.write(path, value, format, **params)
 
     def _is_null(self, value):
         if value is None:
@@ -315,6 +299,9 @@ class Date(Field):
         return value.strftime(self.pattern)
 
     def _unserialize_value(self, value):
+        if isinstance(value, date):
+            return value
+
         try:
             return date(*strptime(value, self.pattern)[:3])
         except Exception:
@@ -393,6 +380,9 @@ class DateTime(Field):
         return value.astimezone(UTC).strftime(self.pattern)
 
     def _unserialize_value(self, value):
+        if isinstance(value, datetime):
+            return value
+
         try:
             unserialized = datetime(*strptime(value, self.pattern)[:6])
             return unserialized.replace(tzinfo=UTC)
@@ -482,6 +472,9 @@ class Float(Field):
             raise SchemeError('Float.maximum must be a float if specified')
 
     def _unserialize_value(self, value):
+        if isinstance(value, float):
+            return value
+
         try:
             return float(value)
         except Exception:
@@ -531,6 +524,8 @@ class Integer(Field):
     def _unserialize_value(self, value):
         if value is True or value is False:
             raise InvalidTypeError(value=value).construct(self, 'invalid')
+        elif isinstance(value, int):
+            return value
 
         try:
             return int(value)
@@ -791,16 +786,18 @@ class Structure(Field):
         'required': "%(field)s is missing required field '%(name)s'",
         'unknown': "%(field)s includes an unknown field '%(name)s'",
     }
+    parameters = ('strict',)
     structure = None
     structural = True
 
-    def __init__(self, structure=None, **params):
+    def __init__(self, structure=None, strict=True, **params):
         super(Structure, self).__init__(**params)
         if structure is not None:
             self.structure = structure
         if not isinstance(self.structure, dict):
             raise SchemeError('structure must be a dict')
 
+        self.strict = strict
         for name, field in self.structure.iteritems():
             if not isinstance(field, Field):
                 raise SchemeError('structure values must be Field instances')
@@ -871,9 +868,10 @@ class Structure(Field):
                 valid = False
                 structure[name] = exception
 
-        for name in names:
-            valid = False
-            structure[name] = ValidationError().construct(self, 'unknown', name=name)
+        if self.strict:
+            for name in names:
+                valid = False
+                structure[name] = ValidationError().construct(self, 'unknown', name=name)
 
         if valid:
             return structure
@@ -980,6 +978,9 @@ class Time(Field):
         return value.strftime(self.pattern)
 
     def _unserialize_value(self, value):
+        if isinstance(value, time):
+            return value
+
         try:
             return time(*strptime(value, self.pattern)[3:6])
         except Exception:

@@ -22,8 +22,4 @@ class ObjectReference(Field):
         except ImportError:
             raise ValidationError(value=value).construct(self, 'import')
 
-    def _validate_value(self, value):
-        if not isinstance(value, type):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
-
 __all__ = construct_all_list(locals(), Field)

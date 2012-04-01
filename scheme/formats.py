@@ -1,3 +1,4 @@
+import os
 import re
 from urllib import urlencode
 
@@ -42,12 +43,35 @@ class Format(object):
     name = None
 
     @classmethod
+    def read(cls, path, **params):
+        extension = os.path.splitext(path)[-1].lower()
+        if extension not in cls.formats:
+            raise Exception()
+
+        openfile = open(path)
+        try:
+            return cls.formats[extension].unserialize(openfile.read(), **params)
+        finally:
+            openfile.close()
+
+    @classmethod
     def serialize(cls, value):
         raise NotImplementedError()
 
     @classmethod
     def unserialize(cls, value):
         raise NotImplementedError()
+
+    @classmethod
+    def write(cls, path, value, format=None, **params):
+        if not format:
+            format = os.path.splitext(path)[-1].lower()
+
+        openfile = open(path, 'w+')
+        try:
+            openfile.write(cls.formats[format].serialize(value, **params))
+        finally:
+            openfile.close()
 
 class Json(Format):
     extensions = ['.json']
@@ -199,7 +223,7 @@ class UrlEncoded(StructuredText):
         return data
 
 class Yaml(Format):
-    extensions = ['.yaml']
+    extensions = ['.yaml', '.yml']
     mimetype = 'application/x-yaml'
     name = 'yaml'
 
