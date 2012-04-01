@@ -597,7 +597,7 @@ class Map(Field):
         else:
             return subject.copy()
         
-    def process(self, value, phase, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
             return None
         if not isinstance(value, dict):
@@ -662,7 +662,7 @@ class Recursive(Field):
     def filter(self, exclusive=False, **params):
         return self.definition.filter(exclusive, **params)
 
-    def process(self, value, phase, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False):
         return self.definition.process(value, phase, serialized)
 
 class Sequence(Field):
@@ -733,7 +733,7 @@ class Sequence(Field):
         else:
             return self
 
-    def process(self, value, phase, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
             return None
         if not isinstance(value, list):
@@ -839,7 +839,7 @@ class Structure(Field):
                 structure[name] = field
         return self.clone(structure=structure)
 
-    def process(self, value, phase, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
             return None
         if not isinstance(value, dict):
@@ -1046,7 +1046,7 @@ class Tuple(Field):
             extraction.append(value)
         return tuple(extraction)
 
-    def process(self, value, phase, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
             return None
         if not isinstance(value, (list, tuple)):
@@ -1105,7 +1105,7 @@ class Union(Field):
         return super(Union, self).describe(parameters,
             fields=[field.describe(parameters) for field in self.fields])
 
-    def process(self, value, phase, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
             return None
 
