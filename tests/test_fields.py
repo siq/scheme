@@ -313,6 +313,16 @@ class TestMap(FieldTestCase):
         expected_error = ValidationError(structure={'a': REQUIRED_ERROR})
         self.assert_not_processed(field, expected_error, {})
 
+    def test_undefined_fields(self):
+        f = Undefined(Integer())
+        field = Map(f)
+        self.assert_processed(field, None, {}, {'a': 1}, {'a': 1, 'b': 2})
+
+        f = Undefined()
+        field = Map(f)
+        f.define(Integer())
+        self.assert_processed(field, None, {}, {'a': 1}, {'a': 1, 'b': 2})
+
     def test_extraction(self):
         field = Map(Integer())
         value = {'a': 1, 'b': 2}
@@ -373,6 +383,16 @@ class TestSequence(FieldTestCase):
 
         self.assert_processed(field, (a[:1], b[:1]), (a[:2], b[:2]))
         self.assert_not_processed(field, 'max_length', (a, b))
+
+    def test_undefined_fields(self):
+        f = Undefined(Integer())
+        field = Sequence(f)
+        self.assert_processed(field, None, [], [1], [1, 2])
+
+        f = Undefined()
+        field = Sequence(f)
+        f.define(Integer())
+        self.assert_processed(field, None, [], [1], [1, 2])
     
     def test_extraction(self):
         field = Sequence(Integer())
@@ -428,6 +448,16 @@ class TestStructure(FieldTestCase):
         self.assertEqual(field.process({}, INCOMING), {'a': 2})
         self.assertEqual(field.process({'a': 1}, OUTGOING), {'a': 1})
         self.assertEqual(field.process({}, OUTGOING), {})
+
+    def test_undefined_fields(self):
+        f = Undefined(Integer())
+        field = Structure({'a': f})
+        self.assert_processed(field, None, {}, {'a': 1})
+
+        f = Undefined()
+        field = Structure({'a': f})
+        f.define(Integer())
+        self.assert_processed(field, None, {}, {'a': 1})
 
     def test_extraction(self):
         field = Structure({'a': Integer()})
@@ -530,6 +560,16 @@ class TestTuple(FieldTestCase):
         expected_error = ValidationError(structure=[NULL_ERROR, None])
         self.assert_not_processed(field, expected_error, ((None, None), (None, None)))
 
+    def test_undefined_fields(self):
+        f = Undefined(Integer())
+        field = Tuple((Text(), f, Text()))
+        self.assert_processed(field, None, (('', 1, ''), ('', 1, '')))
+
+        f = Undefined()
+        field = Tuple((Text(), f, Text()))
+        f.define(Integer())
+        self.assert_processed(field, None, (('', 1, ''), ('', 1, '')))
+    
     def test_extraction(self):
         field = Tuple((Integer(), Text()))
         value = (1, '1')
@@ -559,3 +599,15 @@ class TestUnion(FieldTestCase):
         field = Union((Map(Integer()), Text()))
         self.assert_processed(field, None, {'a': 1}, 'testing')
         self.assert_not_processed(field, 'invalid', 1, True, [])
+
+    def test_undefined_fields(self):
+        f = Undefined(Integer())
+        field = Union((Text(), f, Boolean()))
+        self.assert_processed(field, None, 'testing', 1, True)
+        self.assert_not_processed(field, 'invalid', {}, [])
+
+        f = Undefined()
+        field = Union((Text(), f, Boolean()))
+        f.define(Integer())
+        self.assert_processed(field, None, 'testing', 1, True)
+        self.assert_not_processed(field, 'invalid', {}, [])

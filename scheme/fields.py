@@ -568,7 +568,12 @@ class Map(Field):
         super(Map, self).__init__(**params)
         if value is not None:
             self.value = value
-        if not isinstance(self.value, Field):
+        if isinstance(self.value, Undefined):
+            if self.value.field:
+                self.value = self.value.field
+            else:
+                self.value.register(self._define_undefined_field)
+        elif not isinstance(self.value, Field):
             raise SchemeError('Map(value) must be a Field instance')
 
         self.required_keys = required_keys
@@ -583,6 +588,8 @@ class Map(Field):
         return super(Map, cls).construct(specification)
 
     def describe(self, parameters=None):
+        if not isinstance(self.value, Field):
+            return SchemeError()
         return super(Map, self).describe(parameters, value=self.value.describe(parameters))
 
     def extract(self, subject):
@@ -625,45 +632,12 @@ class Map(Field):
         else:
             raise ValidationError(value=value, structure=map)
 
+    def _define_undefined_field(self, field):
+        self.value = field
+
     @classmethod
     def _visit_field(cls, specification, callback):
         return {'value': callback(specification['value'])}
-
-class Recursive(Field):
-    """A resource field which contains a recursive structure.
-
-    :param definition: A :class:`Field` which represents the start of the
-        recursive structure.
-
-    Using this field typically requires two steps::
-
-        recursor = RecursiveField()
-        structure = Structure({
-            'children': recursor,
-            ...
-        })
-        recursor.definition = structure
-    """
-
-    structural = True
-
-    def __init__(self, definition=None, **params):
-        super(Recursive, self).__init__(**params)
-        if definition is None or (isinstance(definition, Field) and definition.structural):
-            self.definition = definition
-        else:
-            raise SchemeError()
-
-    @classmethod
-    def construct(cls, specification):
-        specification['definition'] = Field.reconstruct(specification['definition'])
-        return super(Recursive, cls).construct(specification)
-
-    def filter(self, exclusive=False, **params):
-        return self.definition.filter(exclusive, **params)
-
-    def process(self, value, phase=INCOMING, serialized=False):
-        return self.definition.process(value, phase, serialized)
 
 class Sequence(Field):
     """A resource field for sequences of items.
@@ -692,7 +666,12 @@ class Sequence(Field):
         super(Sequence, self).__init__(**params)
         if item is not None:
             self.item = item
-        if not isinstance(self.item, Field):
+        if isinstance(self.item, Undefined):
+            if self.item.field:
+                self.item = self.item.field
+            else:
+                self.item.register(self._define_undefined_field)
+        elif not isinstance(self.item, Field):
             raise SchemeError('Sequence.item must be a Field instance')
 
         if min_length is None or (isinstance(min_length, int) and min_length >= 0):
@@ -711,6 +690,8 @@ class Sequence(Field):
         return super(Sequence, cls).construct(specification)
 
     def describe(self, parameters=None):
+        if not isinstance(self.item, Field):
+            raise SchemeError()
         return super(Sequence, self).describe(parameters, item=self.item.describe(parameters))
 
     def extract(self, subject):
@@ -765,6 +746,9 @@ class Sequence(Field):
         else:
             raise ValidationError(value=value, structure=sequence)
 
+    def _define_undefined_field(self, field):
+        self.item = field
+
     @classmethod
     def _visit_field(cls, specification, callback):
         return {'item': callback(specification['item'])}
@@ -798,7 +782,14 @@ class Structure(Field):
             raise SchemeError('structure must be a dict')
 
         self.strict = strict
-        for name, field in self.structure.iteritems():
+        for name, field in self.structure.items():
+            if isinstance(field, Undefined):
+                if field.field:
+                    field = field.field
+                    self.structure[name] = field
+                else:
+                    field.register(self._define_undefined_field, name)
+                    continue
             if not isinstance(field, Field):
                 raise SchemeError('structure values must be Field instances')
             if not field.name:
@@ -812,8 +803,12 @@ class Structure(Field):
         return super(Structure, cls).construct(specification)
 
     def describe(self, parameters=None):
-        structure = dict((name, field.describe(parameters))
-            for name, field in self.structure.iteritems())
+        structure = {}
+        for name, field in self.structure.iteritems():
+            if isinstance(field, Field):
+                structure[name] = field.describe(parameters)
+            else:
+                raise SchemeError()
         return super(Structure, self).describe(parameters, structure=structure)
 
     def extract(self, subject):
@@ -877,6 +872,9 @@ class Structure(Field):
             return structure
         else:
             raise ValidationError(value=value, structure=structure)
+
+    def _define_undefined_field(self, field, name):
+        self.structure[name] = field.clone(name=name)
     
     @classmethod
     def _visit_field(cls, specification, callback):
@@ -1027,6 +1025,21 @@ class Tuple(Field):
             self.values = values
         if not isinstance(self.values, (list, tuple)):
             raise SchemeError('Tuple.values must be a list or tuple')
+        
+        stack = []
+        for i, field in enumerate(self.values):
+            if isinstance(field, Undefined):
+                if field.field:
+                    stack.append(field.field)
+                else:
+                    field.register(self._define_undefined_field, i)
+                    stack.append(field)
+            elif isinstance(field, Field):
+                stack.append(field)
+            else:
+                raise SchemeError('tuple values must be Field instances')
+
+        self.values = tuple(stack)
 
     @classmethod
     def construct(cls, specification):
@@ -1034,8 +1047,13 @@ class Tuple(Field):
         return super(Tuple, cls).construct(specification)
 
     def describe(self, parameters=None):
-        return super(Tuple, self).describe(parameters,
-            values=[value.describe(parameters) for value in self.values])
+        values = []
+        for value in self.values:
+            if isinstance(value, Field):
+                values.append(value.describe(parameters))
+            else:
+                raise SchemeError()
+        return super(Tuple, self).describe(parameters, values=values)
 
     def extract(self, subject):
         extraction = []
@@ -1071,6 +1089,9 @@ class Tuple(Field):
         else:
             raise ValidationError(value=value, structure=sequence)
 
+    def _define_undefined_field(self, field, idx):
+        self.values = tuple(list(self.values[:idx]) + [field] + list(self.values[idx + 1:]))
+
     @classmethod
     def _visit_field(cls, specification, callback):
         return {'values': tuple([callback(field) for field in specification['values']])}
@@ -1092,9 +1113,21 @@ class Union(Field):
             self.fields = fields
         if not isinstance(self.fields, tuple) or not self.fields:
             raise SchemeError('Union.fields must be a tuple with at least one item')
-        for field in self.fields:
-            if not isinstance(field, Field):
+
+        stack = []
+        for i, field in enumerate(self.fields):
+            if isinstance(field, Undefined):
+                if field.field:
+                    stack.append(field.field)
+                else:
+                    field.register(self._define_undefined_field, i)
+                    stack.append(field)
+            elif isinstance(field, Field):
+                stack.append(field)
+            else:
                 raise SchemeError('Union.fields items must be Field instances')
+
+        self.fields = tuple(stack)
 
     @classmethod
     def construct(cls, specification):
@@ -1102,8 +1135,13 @@ class Union(Field):
         return super(Union, cls).construct(specification)
 
     def describe(self, parameters=None):
-        return super(Union, self).describe(parameters,
-            fields=[field.describe(parameters) for field in self.fields])
+        fields = []
+        for field in self.fields:
+            if isinstance(field, Field):
+                fields.append(field.describe(parameters))
+            else:
+                raise SchemeError()
+        return super(Union, self).describe(parameters, fields=fields)
 
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
@@ -1117,9 +1155,27 @@ class Union(Field):
         else:
             raise InvalidTypeError(value=value).construct(self, 'invalid')
 
+    def _define_undefined_field(self, field, idx):
+        self.fields = tuple(list(self.fields[:idx]) + [field] + list(self.fields[idx + 1:]))
+
     @classmethod
     def _visit_field(cls, specification, callback):
         return {'fields': tuple([callback(field) for field in specification['fields']])}
+
+class Undefined(object):
+    """A field which can be defined at a later time."""
+
+    def __init__(self, field=None):
+        self.callbacks = []
+        self.field = field
+
+    def define(self, field):
+        self.field = field
+        for callback, args in self.callbacks:
+            callback(field, *args)
+
+    def register(self, callback, *args):
+        self.callbacks.append((callback, args))
 
 Errors = Tuple((
     Sequence(
@@ -1129,4 +1185,4 @@ Errors = Tuple((
     description='A two-tuple containing the errors for this request.'
 )
 
-__all__ = ['INCOMING', 'OUTGOING', 'Field', 'Errors'] + construct_all_list(locals(), Field)
+__all__ = ['INCOMING', 'OUTGOING', 'Field', 'Errors', 'Undefined'] + construct_all_list(locals(), Field)
