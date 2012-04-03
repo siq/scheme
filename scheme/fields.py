@@ -218,7 +218,7 @@ class Field(object):
 
     def read(self, path, **params):
         data = Format.read(path, **params)
-        return self.process(value, INCOMING, True)
+        return self.process(data, INCOMING, True)
 
     def serialize(self, value, format=None, **params):
         value = self.process(value, OUTGOING, True)
