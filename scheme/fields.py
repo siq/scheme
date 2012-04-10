@@ -651,19 +651,25 @@ class Sequence(Field):
 
     :param integer max_length: Optional, defaults to ``None``; the maximum length
         of this sequence.
+
+    :param boolean unique: Optional, defaults to ``False``; if ``True``, indicates
+        the sequence cannot contain duplicate values.
     """
 
     errors = {
         'invalid': '%(field)s must be a sequence',
         'min_length': '%(field)s must have at least %(min_length)d %(noun)s',
         'max_length': '%(field)s must have at most %(max_length)d %(noun)s',
+        'unique': '%(field)s must not have duplicate values',
     }
     item = None
-    parameters = ('min_length', 'max_length')
+    parameters = ('min_length', 'max_length', 'unique')
     structural = True
 
-    def __init__(self, item=None, min_length=None, max_length=None, **params):
+    def __init__(self, item=None, min_length=None, max_length=None, unique=False, **params):
         super(Sequence, self).__init__(**params)
+        self.unique = unique
+
         if item is not None:
             self.item = item
         if isinstance(self.item, Undefined):
@@ -741,10 +747,12 @@ class Sequence(Field):
                 valid = False
                 sequence.append(exception)
 
-        if valid:
-            return sequence
-        else:
+        if not valid:
             raise ValidationError(value=value, structure=sequence)
+        elif self.unique and len(set(sequence)) != len(sequence):
+            raise ValidationError(value=value).construct(self, 'unique')
+        else:
+            return sequence
 
     def _define_undefined_field(self, field):
         self.item = field

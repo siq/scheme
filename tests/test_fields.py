@@ -384,6 +384,11 @@ class TestSequence(FieldTestCase):
         self.assert_processed(field, (a[:1], b[:1]), (a[:2], b[:2]))
         self.assert_not_processed(field, 'max_length', (a, b))
 
+    def test_unique(self):
+        field = Sequence(Integer(), unique=True)
+        self.assert_processed(field, [], [1], [1, 2])
+        self.assert_not_processed(field, 'unique', [1, 1])
+
     def test_undefined_fields(self):
         f = Undefined(Integer())
         field = Sequence(f)
