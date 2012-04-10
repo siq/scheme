@@ -771,6 +771,10 @@ class Structure(Field):
     :param dict structure: A ``dict`` containing ``string`` keys and :class:`Field` values;
         can only be ``None`` when instantiating a subclass which specifies ``structure``
         at the class level.
+
+    :param boolean strict: Optional, defaults to ``True``; if ``False``, unknown key/value
+        pairs will be silently ignored instead of causing a :exc:`ValidationError` to be
+        raised.
     """
 
     errors = {
