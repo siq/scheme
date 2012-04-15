@@ -112,3 +112,6 @@ class StructureFormatter(object):
             return self._format_long_string(value, level)
         else:
             return repr(value)
+
+def format_structure(structure, level=0, formatter=StructureFormatter()):
+    return formatter.format(structure, level)

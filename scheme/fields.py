@@ -7,7 +7,7 @@ from time import mktime, strptime
 from scheme.exceptions import *
 from scheme.formats import Format
 from scheme.timezone import LOCAL, UTC
-from scheme.util import construct_all_list, minimize_string, pluralize
+from scheme.util import construct_all_list, format_structure, minimize_string, pluralize
 
 NATIVELY_SERIALIZABLE = (basestring, bool, float, int, long, type(None), dict, list, tuple)
 PATTERN_TYPE = type(re.compile(''))
@@ -105,9 +105,24 @@ class Field(object):
         for attr, value in params.iteritems():
             if attr[0] != '_':
                 setattr(self, attr, value)
-    
-    def __repr__(self):
-        return '%s(%r)' % (type(self).__name__, self.name)
+
+    def __repr__(self, params=None, structure=None):
+        aspects = []
+        if self.name:
+            aspects.append('name=%r' % self.name)
+        if params:
+            aspects.extend(params)
+        if self.constant:
+            aspects.append('constant=True')
+        if self.default is not None:
+            aspects.append('default=%r' % self.default)
+        if self.nonnull:
+            aspects.append('nonnull=True')
+        if self.required:
+            aspects.append('required=True')
+        if structure:
+            aspects.append(structure)
+        return '%s(%s)' % (type(self).__name__, ', '.join(aspects))
 
     def __deepcopy__(self, memo):
         return self.clone()
@@ -295,6 +310,14 @@ class Date(Field):
         self.maximum = maximum
         self.minimum = minimum
 
+    def __repr__(self):
+        aspects = []
+        if self.minimum is not None:
+            aspects.append('minimum=%r' % self.minimum)
+        if self.maximum is not None:
+            aspects.append('maximum=%r' % self.maximum)
+        return super(Date, self).__repr__(aspects)
+
     def _serialize_value(self, value):
         return value.strftime(self.pattern)
 
@@ -370,6 +393,14 @@ class DateTime(Field):
         self.maximum = maximum
         self.minimum = minimum
 
+    def __repr__(self):
+        aspects = []
+        if self.minimum is not None:
+            aspects.append('minimum=%r' % self.minimum)
+        if self.maximum is not None:
+            aspects.append('maximum=%r' % self.maximum)
+        return super(DateTime, self).__repr__(aspects)
+
     def _normalize_value(self, value):
         if value.tzinfo is not None:
             return value.astimezone(self.timezone)
@@ -438,6 +469,9 @@ class Enumeration(Field):
         self.enumeration = enumeration
         self.representation = ', '.join([repr(value) for value in enumeration])
 
+    def __repr__(self):
+        return super(Enumeration, self).__repr__(['enumeration=[%s]' % self.representation])
+
     def _validate_value(self, value):
         if value not in self.enumeration:
             raise InvalidTypeError(value=value).construct(self, 'invalid', values=self.representation)
@@ -470,6 +504,14 @@ class Float(Field):
             self.maximum = maximum
         else:
             raise SchemeError('Float.maximum must be a float if specified')
+
+    def __repr__(self):
+        aspects = []
+        if self.minimum is not None:
+            aspects.append('minimum=%r' % self.minimum)
+        if self.maximum is not None:
+            aspects.append('maximum=%r' % self.maximum)
+        return super(Float, self).__repr__(aspects)
 
     def _unserialize_value(self, value):
         if isinstance(value, float):
@@ -520,6 +562,14 @@ class Integer(Field):
             self.maximum = maximum
         else:
             raise SchemeError('Integer.maximum must be an integer if specified')
+
+    def __repr__(self):
+        aspects = []
+        if self.minimum is not None:
+            aspects.append('minimum=%r' % self.minimum)
+        if self.maximum is not None:
+            aspects.append('maximum=%r' % self.maximum)
+        return super(Integer, self).__repr__(aspects)
 
     def _unserialize_value(self, value):
         if value is True or value is False:
@@ -846,6 +896,16 @@ class Structure(Field):
                 structure[name] = field
         return self.clone(structure=structure)
 
+    def merge(self, structure, prefer=False):
+        for name, field in structure.iteritems():
+            if not isinstance(field, Field):
+                raise Exception()
+            if name in self.structure and not prefer:
+                return
+            if field.name != name:
+                field = field.clone(name=name)
+            self.structure[name] = field
+
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
             return None
@@ -904,6 +964,10 @@ class Text(Field):
 
     :param integer max_length: Optional, default is ``None``; the maximum length of valid
         values for this field.
+
+    :param boolean nonempty: Optional, default is ``False``; if ``True``, this field will
+        be instantiated with ``required=True, nonnull=True, min_length=1``. This is merely
+        a shortcut argument.
     """
 
     errors = {
@@ -915,7 +979,11 @@ class Text(Field):
     parameters = ('max_length', 'min_length')
     pattern = None
 
-    def __init__(self, pattern=None, min_length=None, max_length=None, **params):
+    def __init__(self, pattern=None, min_length=None, max_length=None, nonempty=False, **params):
+        if nonempty:
+            params.update(required=True, nonnull=True)
+            min_length = 1
+
         super(Text, self).__init__(**params)
         if pattern is not None:
             if isinstance(pattern, basestring):
@@ -931,6 +999,16 @@ class Text(Field):
             self.max_length = max_length
         else:
             raise SchemeError('TextField.max_length must be an integer >= 0, if specified')
+
+    def __repr__(self):
+        aspects = []
+        if self.min_length is not None:
+            aspects.append('min_length=%r' % self.min_length)
+        if self.max_length is not None:
+            aspects.append('max_length=%r' % self.max_length)
+        if self.pattern is not None:
+            aspects.append('pattern=%r' % self.pattern.pattern)
+        return super(Text, self).__repr__(aspects)
 
     def describe(self, parameters=None):
         if self.pattern:
@@ -983,6 +1061,14 @@ class Time(Field):
         super(Time, self).__init__(**params)
         self.maximum = maximum
         self.minimum = minimum
+
+    def __repr__(self):
+        aspects = []
+        if self.minimum is not None:
+            aspects.append('minimum=%r' % self.minimum)
+        if self.maximum is not None:
+            aspects.append('maximum=%r' % self.maximum)
+        return super(Time, self).__repr__(aspects)
 
     def _serialize_value(self, value):
         return value.strftime(self.pattern)
