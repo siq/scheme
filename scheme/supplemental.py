@@ -12,6 +12,9 @@ class ObjectReference(Field):
         'import': '%(field)s specifies a python object which cannot be imported',
     }
 
+    def get_default(self):
+        return self.default
+
     def _serialize_value(self, value):
         return identify_class(value)
 

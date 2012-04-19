@@ -1,3 +1,5 @@
+from scheme.util import format_structure
+
 __all__ = ('InvalidTypeError', 'SchemeError', 'StructuralError', 'ValidationError')
 
 class SchemeError(Exception):
@@ -10,6 +12,9 @@ class StructuralError(SchemeError):
         self.errors = list(errors)
         self.structure = params.get('structure', None)
         self.value = params.get('value', None)
+
+    def __str__(self):
+        return '\n' + format_structure(self.serialize())
 
     @property
     def substantive(self):
