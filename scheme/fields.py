@@ -906,7 +906,7 @@ class Structure(Field):
                 field = field.clone(name=name)
             self.structure[name] = field
 
-    def process(self, value, phase=INCOMING, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False, partial=False):
         if self._is_null(value):
             return None
         if not isinstance(value, dict):
@@ -920,6 +920,8 @@ class Structure(Field):
             if name in names:
                 names.remove(name)
                 field_value = value[name]
+            elif partial:
+                continue
             elif field.required:
                 valid = False
                 structure[name] = ValidationError().construct(self, 'required', name=name)
