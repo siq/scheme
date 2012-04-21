@@ -1,8 +1,9 @@
 import re
+from types import ModuleType
 
 from scheme.exceptions import *
 from scheme.fields import Field, Text
-from scheme.util import construct_all_list, identify_class, import_object
+from scheme.util import construct_all_list, identify_object, import_object
 
 class ObjectReference(Field):
     """A resource field for references to python objects."""
@@ -16,16 +17,16 @@ class ObjectReference(Field):
         return self.default
 
     def _serialize_value(self, value):
-        return identify_class(value)
+        return identify_object(value)
 
     def _unserialize_value(self, value):
-        if not isinstance(value, basestring):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
-
-        try:
-            return import_object(value)
-        except ImportError:
-            raise ValidationError(value=value).construct(self, 'import')
+        if isinstance(value, basestring):
+            try:
+                return import_object(value)
+            except ImportError:
+                raise ValidationError(value=value).construct(self, 'import')
+        else:
+            return value
 
 class Url(Text):
     """A resource field for urls."""

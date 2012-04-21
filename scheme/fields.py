@@ -139,8 +139,10 @@ class Field(object):
 
         for key, value in self.__dict__.iteritems():
             if key not in params:
-                if not isinstance(value, PATTERN_TYPE):
+                try:
                     value = deepcopy(value)
+                except TypeError:
+                    pass
                 params[key] = value
 
         return type(self)(**params)
@@ -157,18 +159,19 @@ class Field(object):
         contain enough information to reconstruct this field in another context. Any keyword
         parameters are mixed into the description."""
 
-        if 'parameters' in self.parameters:
-            print self
-
         description = {'__type__': self.type}
         for source in (self.parameters, parameters):
             if source:
                 for parameter in source:
-                    value = getattr(self, parameter, None)
-                    if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
-                        description[parameter] = value
+                    if parameter not in params:
+                        value = getattr(self, parameter, None)
+                        if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
+                            description[parameter] = value
+        
+        for name, value in params.iteritems():
+            if value is not None:
+                description[name] = value
 
-        description.update(params)
         return description
 
     def extract(self, subject):
@@ -640,7 +643,15 @@ class Map(Field):
     def describe(self, parameters=None):
         if not isinstance(self.value, Field):
             return SchemeError()
-        return super(Map, self).describe(parameters, value=self.value.describe(parameters))
+
+        default = None
+        if self.default:
+            default = {}
+            for key, value in self.default.iteritems():
+                default[key] = self.value.process(value, OUTGOING, True)
+
+        return super(Map, self).describe(parameters, value=self.value.describe(parameters),
+            default=default)
 
     def extract(self, subject):
         definition = self.value
@@ -748,7 +759,13 @@ class Sequence(Field):
     def describe(self, parameters=None):
         if not isinstance(self.item, Field):
             raise SchemeError()
-        return super(Sequence, self).describe(parameters, item=self.item.describe(parameters))
+
+        default = None
+        if self.default:
+            default = [self.item.process(value, OUTGOING, True) for value in self.default]
+
+        return super(Sequence, self).describe(parameters, item=self.item.describe(parameters),
+            default=default)
 
     def extract(self, subject):
         definition = self.item
@@ -877,15 +894,44 @@ class Structure(Field):
         return super(Structure, cls).construct(specification)
 
     def describe(self, parameters=None):
-        if self.polymorphic_on:
+        polymorphic_on = self.polymorphic_on
+        if polymorphic_on:
+            default = None
+            if self.default:
+                identity = self.default.get(polymorphic_on.name)
+                if identity is not None:
+                    definition = self.structure.get(identity)
+                    if definition:
+                        default = self._describe_default(definition, self.default)
+                    else:
+                        raise Exception()
+                else:
+                    raise Exception()
+
+            structure = {}
+            for identity, candidate in self.structure.iteritems():
+                identity = polymorphic_on._serialize_value(identity)
+                structure[identity] = self._describe_structure(candidate, parameters)
+
             return super(Structure, self).describe(parameters,
-                polymorphic_on=self.polymorphic_on.describe(parameters),
-                structure=dict((identity, self._describe_structure(candidate, parameters))
-                    for identity, candidate in self.structure.iteritems()))
+                default=default,
+                polymorphic_on=polymorphic_on.describe(parameters),
+                structure=structure)
         else:
+            default = None
+            if self.default:
+                default = self._describe_default(self.structure, self.default)
+
             return super(Structure, self).describe(parameters,
+                default=default,
                 polymorphic_on=None,
                 structure = self._describe_structure(self.structure, parameters))
+
+    def _describe_default(self, structure, default):
+        description = {}
+        for name, value in default.iteritems():
+            description[name] = structure[name]._serialize_value(value)
+        return description
 
     def extract(self, subject):
         extraction = {}
@@ -1228,7 +1274,15 @@ class Tuple(Field):
                 values.append(value.describe(parameters))
             else:
                 raise SchemeError()
-        return super(Tuple, self).describe(parameters, values=values)
+
+        default = None
+        if self.default:
+            default = []
+            for field, value in zip(self.values, self.default):
+                default.append(field.process(value, OUTGOING, True))
+            default = tuple(default)
+
+        return super(Tuple, self).describe(parameters, values=values, default=default)
 
     def extract(self, subject):
         extraction = []
