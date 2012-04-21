@@ -831,47 +831,61 @@ class Structure(Field):
         'invalid': '%(field)s must be a structure',
         'required': "%(field)s is missing required field '%(name)s'",
         'unknown': "%(field)s includes an unknown field '%(name)s'",
+        'unrecognized': "%(field)s must specify a recognized polymorphic identity",
     }
     parameters = ('strict',)
     structure = None
     structural = True
 
-    def __init__(self, structure=None, strict=True, **params):
+    def __init__(self, structure=None, strict=True, polymorphic_on=None, **params):
+        if polymorphic_on:
+            if not isinstance(polymorphic_on, Field):
+                raise SchemeError()
+            if not polymorphic_on.required:
+                polymorphic_on = polymorphic_on.clone(required=True)
+
         super(Structure, self).__init__(**params)
+        self.polymorphic_on = polymorphic_on
+        self.strict = strict
+
         if structure is not None:
             self.structure = structure
         if not isinstance(self.structure, dict):
-            raise SchemeError('structure must be a dict')
+            raise SchemeError()
 
-        self.strict = strict
-        for name, field in self.structure.items():
-            if isinstance(field, Undefined):
-                if field.field:
-                    field = field.field
-                    self.structure[name] = field
+        if polymorphic_on:
+            for identity, candidate in self.structure.iteritems():
+                self._prevalidate_structure(candidate, identity)
+                if polymorphic_on in candidate:
+                    raise SchemeError()
                 else:
-                    field.register(self._define_undefined_field, name)
-                    continue
-            if not isinstance(field, Field):
-                raise SchemeError('structure values must be Field instances')
-            if not field.name:
-                field.name = name
+                    candidate[polymorphic_on.name] = polymorphic_on.clone(constant=identity)
+        else:
+            self._prevalidate_structure(self.structure)
 
     @classmethod
     def construct(cls, specification):
         structure = specification['structure']
-        for name, field in structure.items():
-            structure[name] = Field.reconstruct(field)
+        if specification['polymorphic_on']:
+            specification['polymorphic_on'] = Field.reconstruct(specification['polymorphic_on'])
+            for candidate in structure.itervalues():
+                for name, field in candidate.items():
+                    candidate[name] = Field.reconstruct(field)
+        else:
+            for name, field in structure.items():
+                structure[name] = Field.reconstruct(field)
         return super(Structure, cls).construct(specification)
 
     def describe(self, parameters=None):
-        structure = {}
-        for name, field in self.structure.iteritems():
-            if isinstance(field, Field):
-                structure[name] = field.describe(parameters)
-            else:
-                raise SchemeError()
-        return super(Structure, self).describe(parameters, structure=structure)
+        if self.polymorphic_on:
+            return super(Structure, self).describe(parameters,
+                polymorphic_on=self.polymorphic_on.describe(parameters),
+                structure=dict((identity, self._describe_structure(candidate, parameters))
+                    for identity, candidate in self.structure.iteritems()))
+        else:
+            return super(Structure, self).describe(parameters,
+                polymorphic_on=None,
+                structure = self._describe_structure(self.structure, parameters))
 
     def extract(self, subject):
         extraction = {}
@@ -889,11 +903,13 @@ class Structure(Field):
         if not super(Structure, self).filter(exclusive, **params):
             return None
 
-        structure = {}
-        for name, field in self.structure.iteritems():
-            field = field.filter(exclusive, **params)
-            if field:
-                structure[name] = field
+        if self.polymorphic_on:
+            structure = {}
+            for identity, candidate in self.structure.iteritems():
+                structure[identity] = self._filter_structure(candidate, exclusive, params)
+        else:
+            structure = self._filter_structure(self.structure, exclusive, params)
+        
         return self.clone(structure=structure)
 
     def merge(self, structure, prefer=False):
@@ -915,8 +931,22 @@ class Structure(Field):
         valid = True
         names = set(value.keys())
 
+        polymorphic_on = self.polymorphic_on
+        if polymorphic_on:
+            identity = value.get(polymorphic_on.name)
+            if identity is not None:
+                identity = polymorphic_on.process(identity, phase, serialized)
+            else:
+                raise ValidationError().construct(self, 'required', name=polymorphic_on.name)
+
+            definition = self.structure.get(identity)
+            if not definition:
+                raise ValidationError().construct(self, 'unrecognized')
+        else:
+            definition = self.structure
+
         structure = {}
-        for name, field in self.structure.iteritems():
+        for name, field in definition.iteritems():
             if name in names:
                 names.remove(name)
                 field_value = value[name]
@@ -948,12 +978,57 @@ class Structure(Field):
             raise ValidationError(value=value, structure=structure)
 
     def _define_undefined_field(self, field, name):
-        self.structure[name] = field.clone(name=name)
-    
+        identity, name = name
+        if self.polymorphic_on:
+            self.structure[identity][name] = field.clone(name=name)
+        else:
+            self.structure[name] = field.clone(name=name)
+
+    def _describe_structure(self, structure, parameters):
+        description = {}
+        for name, field in structure.iteritems():
+            if isinstance(field, Field):
+                description[name] = field.describe(parameters)
+            else:
+                raise SchemeError()
+        return description
+
+    def _filter_structure(self, structure, exclusive, params):
+        filtered = {}
+        for name, field in structure.iteritems():
+            field = field.filter(exclusive, params)
+            if field:
+                filtered[name] = field
+        return filtered
+
+    def _prevalidate_structure(self, structure, identity=None):
+        if not isinstance(structure, dict):
+            raise SchemeError('structure must be a dict')
+
+        for name, field in structure.items():
+            if isinstance(field, Undefined):
+                if field.field:
+                    field = field.field
+                    structure[name] = field
+                else:
+                    field.register(self._define_undefined_field, (identity, name))
+                    continue
+
+            if not isinstance(field, Field):
+                raise SchemeError('structure values must be Field instances')
+            if not field.name:
+                field.name = name
+
     @classmethod
     def _visit_field(cls, specification, callback):
-        return {'structure': dict((name, callback(field))
-            for name, field in specification['structure'].iteritems())}
+        def visit(structure):
+            return dict((name, callback(field)) for name, field in structure.iteritems())
+
+        if specification['polymorphic_on']:
+            return {'structure': dict((identity, visit(candidate))
+                for identity, candidate in specification['structure'].iteritems())}
+        else:
+            return {'structure': visit(specification['structure'])}
 
 class Text(Field):
     """A resource field for text values.

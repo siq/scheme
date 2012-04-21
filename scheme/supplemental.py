@@ -27,7 +27,7 @@ class ObjectReference(Field):
         except ImportError:
             raise ValidationError(value=value).construct(self, 'import')
 
-class Url(Field):
+class Url(Text):
     """A resource field for urls."""
 
     pattern = re.compile('(?i)'
@@ -38,5 +38,10 @@ class Url(Field):
         r'(?::\d+)?'
         r'(?:/?|[/?]\S+)$'
     )
+
+class UUID(Text):
+    """A resource field for UUIDs."""
+
+    pattern = re.compile(r'^[0-9a-f]{32}$')
 
 __all__ = construct_all_list(locals(), Field)

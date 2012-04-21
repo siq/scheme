@@ -29,6 +29,7 @@ def should_fail(callable, *args, **params):
 INVALID_ERROR = ValidationError({'token': 'invalid'})
 NULL_ERROR = ValidationError({'token': 'nonnull'})
 REQUIRED_ERROR = ValidationError({'token': 'required'})
+UNKNOWN_ERROR = ValidationError({'token': 'unknown'})
 
 class FieldTestCase(TestCase):
     def assert_processed(self, field, *tests):
@@ -418,8 +419,8 @@ class TestSequence(FieldTestCase):
 
 class TestStructure(FieldTestCase):
     def test_specification(self):
-        self.assertRaises(SchemeError, lambda:Structure(True))
-        self.assertRaises(SchemeError, lambda:Structure({'a': True}))
+        self.assertRaises(SchemeError, lambda: Structure(True))
+        self.assertRaises(SchemeError, lambda: Structure({'a': True}))
 
     def test_processing(self):
         field = Structure({})
@@ -485,6 +486,22 @@ class TestStructure(FieldTestCase):
         self.assertIsNot(value, extracted)
         self.assertIsNot(value['a'], extracted['a'])
         self.assertEqual(value, extracted)
+
+    def test_polymorphism(self):
+        field = Structure({
+            'alpha': {'a': Integer()},
+            'beta': {'b': Integer()},
+        }, polymorphic_on=Text(name='identity'))
+
+        self.assert_processed(field, None)
+        self.assert_not_processed(field, 'required', {})
+
+        self.assert_processed(field, {'identity': 'alpha', 'a': 1},
+            {'identity': 'beta', 'b': 2})
+        self.assert_not_processed(field, 'unrecognized', {'identity': 'gamma'})
+
+        expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
+        self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
 
 class TestText(FieldTestCase):
     def test_specification(self):
