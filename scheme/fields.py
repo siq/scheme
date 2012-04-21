@@ -883,7 +883,7 @@ class Structure(Field):
     @classmethod
     def construct(cls, specification):
         structure = specification['structure']
-        if specification['polymorphic_on']:
+        if specification.get('polymorphic_on', False):
             specification['polymorphic_on'] = Field.reconstruct(specification['polymorphic_on'])
             for candidate in structure.itervalues():
                 for name, field in candidate.items():
@@ -1042,7 +1042,7 @@ class Structure(Field):
     def _filter_structure(self, structure, exclusive, params):
         filtered = {}
         for name, field in structure.iteritems():
-            field = field.filter(exclusive, params)
+            field = field.filter(exclusive, **params)
             if field:
                 filtered[name] = field
         return filtered
