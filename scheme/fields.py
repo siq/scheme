@@ -137,6 +137,9 @@ class Field(object):
         """Clones this field by deep copying it. Keyword parameters are applied to the cloned
         field before returning it."""
 
+        if 'default' not in params:
+            params['default'] = self.default
+
         for key, value in self.__dict__.iteritems():
             if key not in params:
                 try:
@@ -854,7 +857,7 @@ class Structure(Field):
     structure = None
     structural = True
 
-    def __init__(self, structure=None, strict=True, polymorphic_on=None, **params):
+    def __init__(self, structure=None, strict=True, polymorphic_on=None, generate_default=False, **params):
         if polymorphic_on:
             if not isinstance(polymorphic_on, Field):
                 raise SchemeError()
@@ -879,6 +882,20 @@ class Structure(Field):
                     candidate[polymorphic_on.name] = polymorphic_on.clone(constant=identity)
         else:
             self._prevalidate_structure(self.structure)
+
+        if generate_default and not self.default:
+            self.default = self.generate_default()
+
+    @property
+    def has_required_fields(self):
+        if self.polymorphic_on:
+            return True
+
+        for field in self.structure.itervalues():
+            if field.required and field.default is None:
+                return True
+        else:
+            return False
 
     @classmethod
     def construct(cls, specification):
@@ -927,12 +944,6 @@ class Structure(Field):
                 polymorphic_on=None,
                 structure = self._describe_structure(self.structure, parameters))
 
-    def _describe_default(self, structure, default):
-        description = {}
-        for name, value in default.iteritems():
-            description[name] = structure[name]._serialize_value(value)
-        return description
-
     def extract(self, subject):
         extraction = {}
         for name, field in self.structure.iteritems():
@@ -957,6 +968,14 @@ class Structure(Field):
             structure = self._filter_structure(self.structure, exclusive, params)
         
         return self.clone(structure=structure)
+
+    def generate_default(self):
+        # todo: support for polymorphic_on
+        default = {}
+        for name, field in self.structure.iteritems():
+            if field.default:
+                default[name] = field.default
+        return default
 
     def merge(self, structure, prefer=False):
         for name, field in structure.iteritems():
@@ -1029,6 +1048,12 @@ class Structure(Field):
             self.structure[identity][name] = field.clone(name=name)
         else:
             self.structure[name] = field.clone(name=name)
+
+    def _describe_default(self, structure, default):
+        description = {}
+        for name, value in default.iteritems():
+            description[name] = structure[name]._serialize_value(value)
+        return description
 
     def _describe_structure(self, structure, parameters):
         description = {}
