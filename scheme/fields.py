@@ -46,6 +46,8 @@ class FieldMeta(type):
     def reconstruct(field, specification):
         """Reconstructs the field described by ``specification``."""
 
+        if isinstance(specification, Field):
+            return specification
         if specification is not None:
             return field.types[specification['__type__']].construct(specification)
 
@@ -1017,12 +1019,12 @@ class Structure(Field):
                 field_value = value[name]
             elif partial:
                 continue
+            elif phase == 'incoming' and field.default:
+                field_value = field.get_default()
             elif field.required:
                 valid = False
                 structure[name] = ValidationError().construct(self, 'required', name=name)
                 continue
-            elif phase == 'incoming' and field.default:
-                field_value = field.get_default()
             else:
                 continue
 
