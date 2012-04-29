@@ -1418,6 +1418,23 @@ class Union(Field):
     def _visit_field(cls, specification, callback):
         return {'fields': tuple([callback(field) for field in specification['fields']])}
 
+class UUID(Field):
+    """A resource field for UUIDs."""
+
+    errors = {
+        'invalid': '%(field)s must be a UUID'
+    }
+    pattern = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
+
+    def __init__(self, nonempty=False, **params):
+        if nonempty:
+            params.update(required=True, nonnull=True)
+        super(UUID, self).__init__(**params)
+
+    def _validate_value(self, value):
+        if not (isinstance(value, basestring) and self.pattern.match(value)):
+            raise InvalidTypeError(value=value).construct(self, 'invalid')
+
 class Undefined(object):
     """A field which can be defined at a later time."""
 

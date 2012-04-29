@@ -40,9 +40,4 @@ class Url(Text):
         r'(?:/?|[/?]\S+)$'
     )
 
-class UUID(Text):
-    """A resource field for UUIDs."""
-
-    pattern = re.compile(r'^[0-9a-f]{32}$')
-
 __all__ = construct_all_list(locals(), Field)
