@@ -1097,7 +1097,7 @@ class Structure(Field):
         def visit(structure):
             return dict((name, callback(field)) for name, field in structure.iteritems())
 
-        if specification['polymorphic_on']:
+        if specification.get('polymorphic_on'):
             return {'structure': dict((identity, visit(candidate))
                 for identity, candidate in specification['structure'].iteritems())}
         else:

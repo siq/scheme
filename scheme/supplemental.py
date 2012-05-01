@@ -28,6 +28,11 @@ class ObjectReference(Field):
         else:
             return value
 
+class Token(Text):
+    """A resource field for tokens."""
+
+    pattern = re.compile(r'^(?:\w[-:.\w]*(?<=\w))?$')
+
 class Url(Text):
     """A resource field for urls."""
 
