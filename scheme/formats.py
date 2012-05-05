@@ -128,18 +128,19 @@ class StructuredText(Format):
         if head == '{' and tail == '}':
             tokens = text[1:-1]
             if tokens:
-                try:
-                    pairs = []
-                    for pair in tokens.split(','):
-                        key, value = pair.split(':')
+                pairs = []
+                for pair in tokens.split(','):
+                    key, value = pair.split(':')
+                    try:
                         if value in structures:
                             value = structures[value]
                         else:
                             value = cls._unserialize_simple_value(value, parse_numbers)
                         pairs.append((key, value))
-                    return dict(pairs)
-                except Exception:
-                    raise ValueError(value)
+                    except Exception:
+                        raise ValueError(value)
+
+                return dict(pairs)
             else:
                 return {}
         elif head == '[' and tail == ']':
