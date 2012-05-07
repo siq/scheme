@@ -1252,6 +1252,27 @@ class Time(Field):
                 raise ValidationError(value=value).construct(self, 'maximum',
                     maximum=maximum.strftime(self.pattern))
 
+class Token(Field):
+    """A resource field for identifier tokens."""
+
+    errors = {
+        'invalid': '%(field)s must be a valid token'
+    }
+    pattern = re.compile(r'^\w[-.\w]*(?<=\w)(?::\w[-.\w]*(?<=\w))*$')
+
+    def __init__(self, segments=None, nonempty=False, **params):
+        if nonempty:
+            params.update(required=True, nonnull=True)
+
+        super(Token, self).__init__(**params)
+        self.segments = segments
+
+    def _validate_value(self, value):
+        if not (isinstance(value, basestring) and self.pattern.match(value)):
+            raise InvalidTypeError(value=value).construct(self, 'invalid')
+        if self.segments is not None and value.count(':') + 1 != self.segments:
+            raise ValidationError(value=value).construct(self, 'invalid')
+
 class Tuple(Field):
     """A resource field for tuples of values.
 

@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 from unittest2 import TestCase
+from uuid import uuid4
 
 from scheme.exceptions import *
 from scheme.fields import *
@@ -557,6 +558,25 @@ class TestTime(FieldTestCase):
             self.assert_processed(field, (now, now_text), self.construct(-1))
             self.assert_not_processed(field, 'maximum', self.construct(+1))
 
+class TestToken(FieldTestCase):
+    def test_processing(self):
+        field = Token()
+        self.assert_processed(field, None, 'good', 'good.good', 'good-good',
+            'good.good-good', 'good:good', 'good:good:good', 'good.good:good.good',
+            'good-good:good-good', 'good.good-good:good.good-good', str(uuid4()))
+        self.assert_not_processed(field, 'invalid', True, 2, '', 'bad.', '.bad',
+            '-bad', 'bad-', ':bad', 'bad:')
+
+    def test_segments(self):
+        field = Token(segments=1)
+        self.assert_processed(field, 'good', 'good.good', 'good-good', 'good.good-good')
+        self.assert_not_processed(field, 'invalid', 'bad:bad', 'bad:bad:bad')
+
+        field = Token(segments=2)
+        self.assert_processed(field, 'good:good', 'good.good:good', 'good:good-good')
+        self.assert_not_processed(field, 'invalid', 'bad', 'bad.bad', 'bad-bad',
+            'bad:bad:bad')
+
 class TestTuple(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Tuple(True))
@@ -633,3 +653,13 @@ class TestUnion(FieldTestCase):
         f.define(Integer())
         self.assert_processed(field, None, 'testing', 1, True)
         self.assert_not_processed(field, 'invalid', {}, [])
+
+class TestUUID(FieldTestCase):
+    def uuid(self):
+        return str(uuid4())
+
+    def test_processing(self):
+        field = UUID()
+        self.assert_processed(field, None, self.uuid())
+        self.assert_not_processed(field, 'invalid', True, '', self.uuid()[:-1])
+
