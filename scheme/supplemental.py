@@ -10,7 +10,7 @@ class ObjectReference(Field):
 
     errors = {
         'invalid': '%(field)s must be a python object',
-        'import': '%(field)s specifies a python object which cannot be imported',
+        'import': '%(field)s specifies %(value)r, which cannot be imported',
     }
 
     def get_default(self):
@@ -24,7 +24,7 @@ class ObjectReference(Field):
             try:
                 return import_object(value)
             except ImportError:
-                raise ValidationError(value=value).construct(self, 'import')
+                raise ValidationError(value=value).construct(self, 'import', value=value)
         else:
             return value
 

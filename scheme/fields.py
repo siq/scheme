@@ -1162,7 +1162,7 @@ class Text(Field):
 
     def describe(self, parameters=None):
         if self.pattern:
-            pattern = repr(self.pattern.pattern)
+            pattern = self.pattern.pattern
         else:
             pattern = None
         return super(Text, self).describe(parameters, pattern=pattern)
