@@ -1019,7 +1019,7 @@ class Structure(Field):
                 field_value = value[name]
             elif partial:
                 continue
-            elif phase == 'incoming' and field.default:
+            elif phase == INCOMING and field.default is not None:
                 field_value = field.get_default()
             elif field.required:
                 valid = False
