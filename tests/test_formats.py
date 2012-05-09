@@ -23,6 +23,7 @@ class TestStructuredText(TestCase):
             ({'b': '1'}, '{b:1}'),
             ({'b': '1', 'c': '2'}, '{b:1,c:2}'),
             ({'b': True}, '{b:true}'),
+            ({'b': 'a:b'}, '{b:a:b}'),
         ])
 
     def test_sequences(self):

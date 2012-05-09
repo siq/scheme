@@ -130,7 +130,7 @@ class StructuredText(Format):
             if tokens:
                 pairs = []
                 for pair in tokens.split(','):
-                    key, value = pair.split(':')
+                    key, value = pair.split(':', 1)
                     try:
                         if value in structures:
                             value = structures[value]

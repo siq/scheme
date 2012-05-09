@@ -104,6 +104,7 @@ class Field(object):
         if errors:
             self.errors = self.errors.copy()
             self.errors.update(errors)
+
         for attr, value in params.iteritems():
             if attr[0] != '_':
                 setattr(self, attr, value)
