@@ -504,6 +504,17 @@ class TestStructure(FieldTestCase):
         expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
         self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
 
+    def test_polymorphic_extraction(self):
+        field = Structure({
+            'alpha': {'a': Integer()},
+            'beta': {'b': Integer()},
+        }, polymorphic_on=Text(name='identity'))
+
+        for value in ({'identity': 'alpha', 'a': 1}, {'identity': 'beta', 'b': 2}):
+            extracted = field.extract(value)
+            self.assertIsNot(extracted, value)
+            self.assertEqual(extracted, value)
+
 class TestText(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Text(min_length='bad'))

@@ -948,8 +948,20 @@ class Structure(Field):
                 structure = self._describe_structure(self.structure, parameters))
 
     def extract(self, subject):
+        polymorphic_on = self.polymorphic_on
+        if polymorphic_on:
+            identity = subject.get(polymorphic_on.name)
+            if identity is not None:
+                definition = self.structure.get(identity)
+                if not definition:
+                    raise ValueError()
+            else:
+                raise ValueError()
+        else:
+            definition = self.structure
+
         extraction = {}
-        for name, field in self.structure.iteritems():
+        for name, field in definition.iteritems():
             try:
                 value = subject[name]
             except KeyError:
