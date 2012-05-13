@@ -520,7 +520,10 @@ class Enumeration(Field):
     errors = {'invalid': '%(field)s must be one of %(values)s'}
     parameters = ('enumeration',)
 
-    def __init__(self, enumeration, **params):
+    def __init__(self, enumeration, nonempty=False, **params):
+        if nonempty:
+            params.update(nonnull=True, required=True)
+
         super(Enumeration, self).__init__(**params)
         if isinstance(enumeration, basestring):
             enumeration = enumeration.split(' ')
