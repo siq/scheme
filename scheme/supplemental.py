@@ -5,6 +5,11 @@ from scheme.exceptions import *
 from scheme.fields import Field, Text
 from scheme.util import construct_all_list, identify_object, import_object
 
+EMAIL_EXPR = (
+    r"([-!#$%&'*+/=?^_`{}|~0-9A-Z]+(\.[-!#$%&'*+/=?^_`{}|~0-9A-Z]+)*"
+    r'|"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"'
+    r')@(?:[A-Z0-9-]+\.)+[A-Z]{2,6}')
+
 class ObjectReference(Field):
     """A resource field for references to python objects."""
 
@@ -27,11 +32,6 @@ class ObjectReference(Field):
                 raise ValidationError(value=value).construct(self, 'import', value=value)
         else:
             return value
-
-class Token(Text):
-    """A resource field for tokens."""
-
-    pattern = re.compile(r'^(?:\w[-:.\w]*(?<=\w))?$')
 
 class Url(Text):
     """A resource field for urls."""

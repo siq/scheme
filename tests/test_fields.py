@@ -1,3 +1,4 @@
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import date, datetime, time, timedelta
 from unittest2 import TestCase
 from uuid import uuid4
@@ -155,6 +156,25 @@ class TestField(FieldTestCase):
 
         field = Field(default=datetime.now)
         assert isinstance(field.get_default(), datetime)
+
+class TestBinary(FieldTestCase):
+    def test_processing(self):
+        field = Binary()
+        self.assert_processed(field, None, '',
+            ('testing', 'dGVzdGluZw=='),
+            ('\x00\x00', 'AAA='))
+        self.assert_not_processed(field, 'invalid', True, 1.0)
+
+    def test_min_length(self):
+        field = Binary(min_length=2)
+        self.assert_processed(field, ('\x00\x00', 'AAA='), ('\x00\x00\x00', 'AAAA'))
+        self.assert_not_processed(field, 'min_length', ('', ''), ('\x00', 'AA=='))
+
+    def test_max_length(self):
+        field = Binary(max_length=1)
+        self.assert_processed(field, ('', ''), ('\x00', 'AA=='))
+        self.assert_not_processed(field, 'max_length', ('\x00\x00', 'AAA='),
+            ('\x00\x00\x00', 'AAAA'))
 
 class TestBoolean(FieldTestCase):
     def test_processing(self):

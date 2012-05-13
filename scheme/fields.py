@@ -1,5 +1,6 @@
 import os
 import re
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from copy import deepcopy
 from datetime import datetime, date, time
 from time import mktime, strptime
@@ -286,6 +287,61 @@ class Field(object):
     @classmethod
     def _visit_field(cls, specification, callback):
         return {}
+
+class Binary(Field):
+    """A resource field for binary values."""
+
+    errors = {
+        'invalid': '%(field)s must be a binary value',
+        'min_length': '%(field)s must contain at least %(min_length)d %(noun)s',
+        'max_length': '%(field)s may contain at most %(max_length)d %(noun)s',
+    }
+    parameters = ('max_length', 'min_length')
+
+    def __init__(self, min_length=None, max_length=None, nonempty=False, **params):
+        if nonempty:
+            params.update(required=True, nonnull=True)
+            if min_length is None:
+                min_length = 1
+
+        super(Binary, self).__init__(**params)
+        if min_length is None or (isinstance(min_length, int) and min_length >= 0):
+            self.min_length = min_length
+        else:
+            raise SchemeError('min_length must be an integer >= 0, if specified')
+
+        if max_length is None or (isinstance(max_length, int) and max_length >= 0):
+            self.max_length = max_length
+        else:
+            raise SchemeError('max_length must be an integer >= 0, if specified')
+
+    def _serialize_value(self, value):
+        return urlsafe_b64encode(value)
+
+    def _unserialize_value(self, value):
+        if not isinstance(value, basestring):
+            raise InvalidTypeError(value=value).construct(self, 'invalid')
+        return urlsafe_b64decode(value)
+
+    def _validate_value(self, value):
+        if not isinstance(value, basestring):
+            raise InvalidTypeError(value=value).construct(self, 'invalid')
+
+        min_length = self.min_length
+        if min_length is not None and len(value) < min_length:
+            noun = 'byte'
+            if min_length > 1:
+                noun = 'bytes'
+            raise ValidationError(value=value).construct(self, 'min_length',
+                min_length=min_length, noun=noun)
+
+        max_length = self.max_length
+        if max_length is not None and len(value) > max_length:
+            noun = 'byte'
+            if max_length > 1:
+                noun = 'bytes'
+            raise ValidationError(value=value).construct(self, 'max_length',
+                max_length=max_length, noun=noun)
 
 class Boolean(Field):
     """A resource field for ``boolean`` values."""
@@ -1145,7 +1201,8 @@ class Text(Field):
     def __init__(self, pattern=None, min_length=None, max_length=None, nonempty=False, **params):
         if nonempty:
             params.update(required=True, nonnull=True)
-            min_length = 1
+            if min_length is None:
+                min_length = 1
 
         super(Text, self).__init__(**params)
         if pattern is not None:
