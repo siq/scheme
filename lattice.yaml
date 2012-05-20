@@ -3,6 +3,7 @@ components:
     description: Schema is a declarative schema framework for python.
     dependencies:
       - python
+      - pyyaml
     builds:
       default:
         script: |
