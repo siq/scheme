@@ -14,7 +14,7 @@ class StructuralError(SchemeError):
         self.value = params.get('value', None)
 
     def __str__(self):
-        return '\n' + format_structure(self.serialize())
+        return '\n' + self.format_errors()
 
     @property
     def substantive(self):
@@ -27,6 +27,9 @@ class StructuralError(SchemeError):
     def attach(self, structure):
         self.structure = structure
         return self
+
+    def format_errors(self):
+        return format_structure(self.serialize())
 
     def merge(self, exception):
         self.errors.extend(exception.errors)
