@@ -10,8 +10,11 @@ class StructuralError(SchemeError):
 
     def __init__(self, *errors, **params):
         self.errors = list(errors)
-        self.structure = params.get('structure', None)
-        self.value = params.get('value', None)
+        self.structure = params.pop('structure', None)
+        self.value = params.pop('value', None)
+
+        if params and 'token' in params:
+            self.errors.append(params)
 
     def __str__(self):
         return '\n' + self.format_errors()
