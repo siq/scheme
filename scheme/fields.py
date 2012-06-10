@@ -1331,7 +1331,7 @@ class Token(Field):
     errors = {
         'invalid': '%(field)s must be a valid token'
     }
-    pattern = re.compile(r'^\w[-.\w]*(?<=\w)(?::\w[-.\w]*(?<=\w))*$')
+    pattern = re.compile(r'^\w[-+.\w]*(?<=\w)(?::\w[-+.\w]*(?<=\w))*$')
 
     def __init__(self, segments=None, nonempty=False, **params):
         if nonempty:
