@@ -1,8 +1,17 @@
+import os
 from distutils.core import setup
+
+VERSION = '1.0.0'
+try:
+    revision = os.environ['REVISION']
+except Exception:
+    pass
+else:
+    VERSION = revision
 
 setup(
     name='scheme',
-    version='1.0.0a1',
+    version=VERSION,
     description='A declarative schema framework.',
     author='Jordan McCoy',
     author_email='mccoy.jordan@gmail.com',
