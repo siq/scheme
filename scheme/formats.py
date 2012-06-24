@@ -43,7 +43,13 @@ class Format(object):
     name = None
 
     @classmethod
-    def read(cls, path, **params):
+    def read(cls, path, quiet=False, **params):
+        if not os.path.exists(path):
+            if quiet:
+                return False
+            else:
+                raise ValueError(path)
+
         extension = os.path.splitext(path)[-1].lower()
         if extension not in cls.formats:
             raise Exception()
