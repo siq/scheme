@@ -92,7 +92,10 @@ class Field(object):
     structural = False
 
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
-        constant=None, errors=None, notes=None, **params):
+        constant=None, errors=None, notes=None, nonempty=False, **params):
+
+        if nonempty:
+            nonnull = required = True
 
         self.constant = constant
         self.default = default
@@ -520,10 +523,7 @@ class Enumeration(Field):
     errors = {'invalid': '%(field)s must be one of %(values)s'}
     parameters = ('enumeration',)
 
-    def __init__(self, enumeration, nonempty=False, **params):
-        if nonempty:
-            params.update(nonnull=True, required=True)
-
+    def __init__(self, enumeration, **params):
         super(Enumeration, self).__init__(**params)
         if isinstance(enumeration, basestring):
             enumeration = enumeration.split(' ')
@@ -1333,10 +1333,7 @@ class Token(Field):
     }
     pattern = re.compile(r'^\w[-+.\w]*(?<=\w)(?::\w[-+.\w]*(?<=\w))*$')
 
-    def __init__(self, segments=None, nonempty=False, **params):
-        if nonempty:
-            params.update(required=True, nonnull=True)
-
+    def __init__(self, segments=None, **params):
         super(Token, self).__init__(**params)
         self.segments = segments
 
@@ -1520,9 +1517,7 @@ class UUID(Field):
     }
     pattern = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
 
-    def __init__(self, nonempty=False, **params):
-        if nonempty:
-            params.update(required=True, nonnull=True)
+    def __init__(self, **params):
         super(UUID, self).__init__(**params)
 
     def _validate_value(self, value):
