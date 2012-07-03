@@ -5,3 +5,4 @@ MANIFEST
 dist
 .coverage
 docs/_build
+build
