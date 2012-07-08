@@ -1047,7 +1047,7 @@ class Structure(Field):
         # todo: support for polymorphic_on
         default = {}
         for name, field in self.structure.iteritems():
-            if field.default:
+            if field.default is not None:
                 default[name] = field.default
         return default
 
