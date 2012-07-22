@@ -21,6 +21,8 @@ class FixedOffsetTimezone(tzinfo):
             self.name = name
 
     def __repr__(self):
+        if self.name:
+            return self.name
         return 'FixedOffsetTimezone(%r)' % self.offset.seconds
 
     def dst(self, value):
@@ -66,4 +68,4 @@ class LocalTimezone(tzinfo):
         return (time.localtime(timestamp).tm_isdst > 0)
 
 LOCAL = LocalTimezone()
-UTC = FixedOffsetTimezone(0)
+UTC = FixedOffsetTimezone(0, 'UTC')
