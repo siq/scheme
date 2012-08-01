@@ -440,7 +440,7 @@ class DateTime(Field):
     be converted back to the default timezone (typically local).
     """
 
-    parameters = ('maximum', 'minimum')
+    parameters = ('maximum', 'minimum', 'utc')
     pattern = '%Y-%m-%dT%H:%M:%SZ'
 
     errors = {
@@ -449,9 +449,10 @@ class DateTime(Field):
         'maximum': '%(field)s must not occur after %(maximum)s',
     }
 
-    def __init__(self, minimum=None, maximum=None, timezone=LOCAL, **params):
+    def __init__(self, minimum=None, maximum=None, utc=False, **params):
         super(DateTime, self).__init__(**params)
-        self.timezone = timezone
+        self.utc = utc
+        self.timezone = (UTC if utc else LOCAL)
 
         if isinstance(minimum, datetime):
             minimum = self._normalize_value(minimum)
