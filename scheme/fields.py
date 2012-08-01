@@ -452,7 +452,10 @@ class DateTime(Field):
     def __init__(self, minimum=None, maximum=None, utc=False, **params):
         super(DateTime, self).__init__(**params)
         self.utc = utc
-        self.timezone = (UTC if utc else LOCAL)
+        if utc:
+            self.timezone = UTC
+        else:
+            self.timezone = LOCAL
 
         if isinstance(minimum, datetime):
             minimum = self._normalize_value(minimum)
