@@ -1,4 +1,4 @@
-from datetime import timedelta, tzinfo
+from datetime import datetime, timedelta, tzinfo
 import time
 
 ZERO = timedelta(0)
@@ -69,3 +69,6 @@ class LocalTimezone(tzinfo):
 
 LOCAL = LocalTimezone()
 UTC = FixedOffsetTimezone(0, 'UTC')
+
+def current_timestamp(timezone=UTC):
+    return datetime.now(timezone)
