@@ -1,6 +1,8 @@
 import os
 import re
 from urllib import urlencode
+from csv import Dialect, DictWriter, QUOTE_ALL
+from cStringIO import StringIO
 
 try:
     import json
@@ -243,5 +245,43 @@ class Yaml(Format):
     def unserialize(cls, value):
         import yaml
         return yaml.load(value)
+
+class Csv(Format):
+    extensions = ['.csv']
+    mimetype = 'application/csv'
+    name = 'csv'
+
+    class CsvDialect(Dialect):
+        quoting = QUOTE_ALL
+        quotechar = '"'
+        doublequote = True
+        delimiter = ','
+        escapechar = None
+        lineterminator = '\r\n'
+        skipinitialspace = False
+
+    @classmethod
+    def serialize(cls, rows, columns=None):
+        if not isinstance(rows, list):
+            raise ValueError(rows)
+        if not len(rows):
+            return []
+
+        if not columns:
+            columns = rows[0].keys()
+            columns.sort()
+
+        header = dict([(n, n) for n in columns])
+
+        f = StringIO()
+        try:
+            dw = DictWriter(f, columns, extrasaction='ignore', dialect=Csv.CsvDialect)
+            dw.writerow(header)
+            dw.writerows(rows)
+        except Exception, e:
+            print 'Csv.serialize:', str(e)
+            raise ValueError(rows)
+
+        return f.getvalue()
 
 __all__ = ['Format'] + construct_all_list(locals(), Format)
