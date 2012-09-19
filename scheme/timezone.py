@@ -70,5 +70,5 @@ class LocalTimezone(tzinfo):
 LOCAL = LocalTimezone()
 UTC = FixedOffsetTimezone(0, 'UTC')
 
-def current_timestamp(timezone=UTC):
-    return datetime.now(timezone)
+def current_timestamp(timezone=None):
+    return datetime.now(timezone or UTC)
