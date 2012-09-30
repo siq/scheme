@@ -1,3 +1,5 @@
+from traceback import format_exc
+
 from scheme.util import format_structure
 
 __all__ = ('InvalidTypeError', 'SchemeError', 'StructuralError', 'ValidationError')
@@ -11,13 +13,17 @@ class StructuralError(SchemeError):
     def __init__(self, *errors, **params):
         self.errors = list(errors)
         self.structure = params.pop('structure', None)
+        self.tracebacks = None
         self.value = params.pop('value', None)
 
         if params and 'token' in params:
             self.errors.append(params)
 
     def __str__(self):
-        return '\n' + self.format_errors()
+        content = '\n' + self.format_errors()
+        if self.tracebacks:
+            content += 'Captured tracebacks:\n' + '\n'.join(self.tracebacks)
+        return content
 
     @property
     def substantive(self):
@@ -29,6 +35,13 @@ class StructuralError(SchemeError):
 
     def attach(self, structure):
         self.structure = structure
+        return self
+
+    def capture(self):
+        if self.tracebacks is None:
+            self.tracebacks = []
+
+        self.tracebacks.append(format_exc())
         return self
 
     def format_errors(self):
