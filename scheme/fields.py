@@ -57,8 +57,8 @@ class Field(object):
 
     :param string name: The name of this field.
 
-    :param string description: Optional, a concise description of this field,
-        used prominently in documentation.
+    :param string description: Optional, default is ``None``; a concise description
+        of this field, used prominently in generated documentation.
 
     :param default: Optional, default is ``None``; if specified, indicates
         the default value for this field when no value is present in a
@@ -73,11 +73,18 @@ class Field(object):
         this field is required to be present in a request to the associated
         resource. Only applicable when this field is part of a ``Structure``.
 
+    :param constant: Optional, default is ``None``; if specified, constrains this
+        field to only accept this exact value.
+
     :param dict errors: Optional, default is ``None``; specifies custom error
         strings for this field.
 
     :param string notes: Optional, notes of any length concerning the use of
         this field, used primarily for documentation.
+
+    :param boolean nonempty: Optional, default is ``False``; if ``True``, is
+        equivalent at a minimum to ``nonnull=True`` and ``required=True``;
+        subclasses may add behavior.
     """
 
     __metaclass__ = FieldMeta
@@ -431,8 +438,8 @@ class DateTime(Field):
         a naive value will be assumed to be in the timezone set for this field, and will have
         that timezone applied to it.
 
-    :param tzinfo timezone: Optional, default is the local timezone; the timezone to apply
-        to naive values processed by this field.
+    :param boolean utc: Optional, default is ``False``; if ``True``, this field will expect
+        incoming values to be in UTC, and will return values in UTC.
 
     Values are serialized according to ISO-8601, in UTC time. A naive ``datetime`` (one with
     no ``tzinfo``) will be assumed to be in the default timezone for the field, and will be
@@ -905,12 +912,20 @@ class Structure(Field):
     will be raised if unknown keys are present in the value being processed.
 
     :param dict structure: A ``dict`` containing ``string`` keys and :class:`Field` values;
-        can only be ``None`` when instantiating a subclass which specifies ``structure``
-        at the class level.
+        can be ``None`` only when instantiating a subclass of ``Structure`` which specifies
+        ``structure`` at the class level.
 
-    :param boolean strict: Optional, defaults to ``True``; if ``False``, unknown key/value
-        pairs will be silently ignored instead of causing a :exc:`ValidationError` to be
-        raised.
+    :param boolean strict: Optional, defaults to ``True``; if ``False``, key/value pairs
+        which aren't present in ``structure`` will be silently ignored during validation
+        instead of causing a :exc:`ValidationError` to be raised.
+
+    :param Field polymorphic_on: Optional, defaults to ``None``; if specified, should be
+        a :class:`Field` instance which establishes the discriminator field for this
+        structure, which is thusly considered polymorphic.
+
+    :param boolean generate_default: Optional, defaults to ``False``; if ``True``, a
+        default value for this field is dynamically constructed by collecting the default
+        values, if any, of the fields specified within ``structure`` into a ``dict``.
     """
 
     errors = {
@@ -1330,7 +1345,14 @@ class Time(Field):
                     maximum=maximum.strftime(self.pattern))
 
 class Token(Field):
-    """A resource field for identifier tokens."""
+    """A resource field for identifier tokens.
+
+    A token is a string containing one or more colon-delimited segments, with each segment
+    starting and ending with any of [a-zA-Z0-9_] and containing any of [a-zA-Z0-9_-+.].
+
+    :param int segments: Optional, default is ``None``; if specified, indicates the exact
+        number of segments that valid values for this field must have.
+    """
 
     errors = {
         'invalid': '%(field)s must be a valid token'
