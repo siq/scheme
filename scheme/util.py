@@ -133,3 +133,15 @@ class StructureFormatter(object):
 
 def format_structure(structure, level=0, formatter=StructureFormatter()):
     return formatter.format(structure, level)
+
+def traverse_to_key(value, path):
+    for key in path.split('.'):
+        if isinstance(value, dict):
+            if key in value:
+                value = value[key]
+            else:
+                raise KeyError(path)
+        else:
+            raise TypeError(value)
+    else:
+        return value

@@ -14,7 +14,7 @@ try:
 except ImportError:
     from cgi import parse_qsl
 
-from scheme.util import construct_all_list
+from scheme.util import construct_all_list, traverse_to_key
 
 class FormatMeta(type):
     def __new__(metatype, name, bases, namespace):
@@ -251,7 +251,7 @@ class Csv(Format):
     mimetype = 'application/csv'
     name = 'csv'
 
-    class CsvDialect(Dialect):
+    class Dialect(Dialect):
         quoting = QUOTE_ALL
         quotechar = '"'
         doublequote = True
@@ -261,27 +261,24 @@ class Csv(Format):
         skipinitialspace = False
 
     @classmethod
-    def serialize(cls, rows, columns=None):
-        if not isinstance(rows, list):
-            raise ValueError(rows)
-        if not len(rows):
-            return []
+    def serialize(cls, value, columns=None, path=None):
+        if path:
+            value = traverse_to_key(value, path)
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(value)
+        if not value:
+            return ''
 
+        if isinstance(columns, basestring):
+            columns = columns.split(',')
         if not columns:
-            columns = rows[0].keys()
-            columns.sort()
+            columns = sorted(value[0].keys())
 
-        header = dict([(n, n) for n in columns])
+        content = StringIO()
+        writer = DictWriter(content, columns, extrasaction='ignore', dialect=cls.Dialect)
 
-        f = StringIO()
-        try:
-            dw = DictWriter(f, columns, extrasaction='ignore', dialect=Csv.CsvDialect)
-            dw.writerow(header)
-            dw.writerows(rows)
-        except Exception, e:
-            print 'Csv.serialize:', str(e)
-            raise ValueError(rows)
-
-        return f.getvalue()
+        writer.writerow(dict((name, name) for name in columns))
+        writer.writerows(value)
+        return content.getvalue()
 
 __all__ = ['Format'] + construct_all_list(locals(), Format)
