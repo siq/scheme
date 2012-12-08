@@ -71,4 +71,6 @@ LOCAL = LocalTimezone()
 UTC = FixedOffsetTimezone(0, 'UTC')
 
 def current_timestamp(timezone=None):
-    return datetime.now(timezone or UTC)
+    if not isinstance(timezone, tzinfo):
+        timezone = UTC
+    return datetime.now(timezone)
