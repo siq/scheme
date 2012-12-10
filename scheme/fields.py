@@ -555,6 +555,26 @@ class Enumeration(Field):
         if value not in self.enumeration:
             raise InvalidTypeError(value=value).construct(self, 'invalid', values=self.representation)
 
+class FieldDefinition(Field):
+    """A field for field definitions."""
+
+    errors = {
+        'invalid': '%(field)s must be a field definition',
+    }
+
+    def _serialize_value(self, value):
+        return value.describe()
+
+    def _unserialize_value(self, value):
+        try:
+            return Field.reconstruct(value)
+        except Exception:
+            raise ValidationError(value=value).construct(self, 'invalid')
+
+    def _validate_value(self, value):
+        if not isinstance(value, Field):
+            raise InvalidTypeError(value=value).construct(self, 'invalid')
+
 class Float(Field):
     """A resource field for ``float`` values.
 
