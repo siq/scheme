@@ -28,6 +28,30 @@ def should_fail(callable, *args, **params):
     else:
         assert False, 'exception should be raised'
 
+class attrmap(object):
+    def __init__(self, field, value):
+        self.__dict__.update(value)
+
+    @classmethod
+    def extract(self, field, value):
+        return value.__dict__
+
+class listwrapper(object):
+    def __init__(self, field, value):
+        self.list = value
+
+    @classmethod
+    def extract(self, field, value):
+        return value.list
+
+class valuewrapper(object):
+    def __init__(self, field, value):
+        self.value = value
+
+    @classmethod
+    def extract(self, field, value):
+        return value.value
+
 INVALID_ERROR = ValidationError({'token': 'invalid'})
 NULL_ERROR = ValidationError({'token': 'nonnull'})
 REQUIRED_ERROR = ValidationError({'token': 'required'})
@@ -156,6 +180,14 @@ class TestField(FieldTestCase):
 
         field = Field(default=datetime.now)
         assert isinstance(field.get_default(), datetime)
+
+    def test_extraction(self):
+        field = Field()
+        self.assertEqual(field.extract(1), 1)
+
+    def test_instantiate(self):
+        field = Field()
+        self.assertEqual(field.instantiate(1), 1)
 
 class TestBinary(FieldTestCase):
     def test_processing(self):
@@ -345,11 +377,12 @@ class TestMap(FieldTestCase):
         f.define(Integer())
         self.assert_processed(field, None, {}, {'a': 1}, {'a': 1, 'b': 2})
 
-    def test_extraction(self):
+    def test_naive_extraction(self):
         field = Map(Integer())
         value = {'a': 1, 'b': 2}
 
         extracted = field.extract(value)
+        self.assertIsInstance(extracted, dict)
         self.assertIsNot(value, extracted)
         self.assertEqual(value, extracted)
 
@@ -360,6 +393,47 @@ class TestMap(FieldTestCase):
         self.assertIsNot(value, extracted)
         self.assertIsNot(value['a'], extracted['a'])
         self.assertEqual(value, extracted)
+
+    def test_mediated_extraction(self):
+        field = Map(Integer(), extractor=attrmap.extract)
+        value = {'a': 1, 'b': 2}
+        extracted = field.extract(attrmap(None, value))
+
+        self.assertIsInstance(extracted, dict)
+        self.assertIsNot(extracted, value)
+        self.assertEqual(extracted, value)
+
+        field = Map(Integer(extractor=valuewrapper.extract), extractor=attrmap.extract)
+        value = attrmap(None, {'a': valuewrapper(None, 1), 'b': valuewrapper(None, 2)})
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1, 'b': 2})
+
+        field = Map(Integer(extractor=valuewrapper.extract))
+        value = {'a': valuewrapper(None, 1), 'b': valuewrapper(None, 2)}
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1, 'b': 2})
+
+    def test_instantiation(self):
+        field = Map(Integer(), instantiator=attrmap)
+        instance = field.instantiate({'a': 1, 'b': 2})
+
+        self.assertIsInstance(instance, attrmap)
+        self.assertEqual(instance.a, 1)
+        self.assertEqual(instance.b, 2)
+
+        instance = field.instantiate({})
+        self.assertIsInstance(instance, attrmap)
+
+        field = Map(Integer(instantiator=valuewrapper), instantiator=attrmap)
+        instance = field.instantiate({'a': 1, 'b': 2})
+
+        self.assertIsInstance(instance, attrmap)
+        self.assertIsInstance(instance.a, valuewrapper)
+        self.assertEqual(instance.a.value, 1)
 
 class TestSequence(FieldTestCase):
     def generate_sequences(self):
@@ -421,7 +495,7 @@ class TestSequence(FieldTestCase):
         f.define(Integer())
         self.assert_processed(field, None, [], [1], [1, 2])
     
-    def test_extraction(self):
+    def test_naive_extraction(self):
         field = Sequence(Integer())
         value = [1, 2, 3]
 
@@ -437,6 +511,57 @@ class TestSequence(FieldTestCase):
         self.assertEqual(value, extracted)
         for i in (0, 1, 2):
             self.assertIsNot(value[i], extracted[i])
+
+    def test_mediated_extraction(self):
+        field = Sequence(Integer(), extractor=listwrapper.extract)
+        value = listwrapper(None, [1, 2])
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, list)
+        self.assertEqual(extracted, [1, 2])
+
+        field = Sequence(Integer(extractor=valuewrapper.extract), extractor=listwrapper.extract)
+        value = listwrapper(None, [valuewrapper(None, 1), valuewrapper(None, 2)])
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, list)
+        self.assertEqual(extracted, [1, 2])
+
+        field = Sequence(Integer(extractor=valuewrapper.extract))
+        value = [valuewrapper(None, 1), valuewrapper(None, 2)]
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, list)
+        self.assertEqual(extracted, [1, 2])
+
+    def test_instantiation(self):
+        field = Sequence(Integer(), instantiator=listwrapper)
+        instance = field.instantiate([1, 2])
+
+        self.assertIsInstance(instance, listwrapper)
+        self.assertEqual(instance.list, [1, 2])
+
+        instance = field.instantiate([])
+        self.assertIsInstance(instance, listwrapper)
+        self.assertEqual(instance.list, [])
+
+        field = Sequence(Integer(instantiator=valuewrapper), instantiator=listwrapper)
+        instance = field.instantiate([1, 2])
+
+        self.assertIsInstance(instance, listwrapper)
+        self.assertIsInstance(instance.list[0], valuewrapper)
+        self.assertEqual(instance.list[0].value, 1)
+        self.assertIsInstance(instance.list[1], valuewrapper)
+        self.assertEqual(instance.list[1].value, 2)
+
+        field = Sequence(Integer(instantiator=valuewrapper))
+        instance = field.instantiate([1, 2])
+
+        self.assertIsInstance(instance, list)
+        self.assertIsInstance(instance[0], valuewrapper)
+        self.assertEqual(instance[0].value, 1)
+        self.assertIsInstance(instance[1], valuewrapper)
+        self.assertEqual(instance[1].value, 2)
 
 class TestStructure(FieldTestCase):
     def test_specification(self):
@@ -486,7 +611,23 @@ class TestStructure(FieldTestCase):
         f.define(Integer())
         self.assert_processed(field, None, {}, {'a': 1})
 
-    def test_extraction(self):
+    def test_polymorphism(self):
+        field = Structure({
+            'alpha': {'a': Integer()},
+            'beta': {'b': Integer()},
+        }, polymorphic_on=Text(name='identity'))
+
+        self.assert_processed(field, None)
+        self.assert_not_processed(field, 'required', {})
+
+        self.assert_processed(field, {'identity': 'alpha', 'a': 1},
+            {'identity': 'beta', 'b': 2})
+        self.assert_not_processed(field, 'unrecognized', {'identity': 'gamma'})
+
+        expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
+        self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
+
+    def test_naive_extraction(self):
         field = Structure({'a': Integer()})
         value = {'a': 1}
 
@@ -508,23 +649,6 @@ class TestStructure(FieldTestCase):
         self.assertIsNot(value['a'], extracted['a'])
         self.assertEqual(value, extracted)
 
-    def test_polymorphism(self):
-        field = Structure({
-            'alpha': {'a': Integer()},
-            'beta': {'b': Integer()},
-        }, polymorphic_on=Text(name='identity'))
-
-        self.assert_processed(field, None)
-        self.assert_not_processed(field, 'required', {})
-
-        self.assert_processed(field, {'identity': 'alpha', 'a': 1},
-            {'identity': 'beta', 'b': 2})
-        self.assert_not_processed(field, 'unrecognized', {'identity': 'gamma'})
-
-        expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
-        self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
-
-    def test_polymorphic_extraction(self):
         field = Structure({
             'alpha': {'a': Integer()},
             'beta': {'b': Integer()},
@@ -534,6 +658,65 @@ class TestStructure(FieldTestCase):
             extracted = field.extract(value)
             self.assertIsNot(extracted, value)
             self.assertEqual(extracted, value)
+
+    def test_mediated_extraction(self):
+        field = Structure({'a': Integer(), 'b': Text()}, extractor=attrmap.extract)
+        value = attrmap(None, {'a': 1, 'b': 'test'})
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1, 'b': 'test'})
+
+        field = Structure({'a': Integer(extractor=valuewrapper.extract), 'b': Text()}, extractor=attrmap.extract)
+        value = attrmap(None, {'a': valuewrapper(None, 1), 'b': 'test'})
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1, 'b': 'test'})
+
+        field = Structure({'a': Integer(), 'b': Text(extractor=valuewrapper.extract)})
+        value = {'a': 1, 'b': valuewrapper(None, 'test')}
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1, 'b': 'test'})
+
+    def test_instantiation(self):
+        field = Structure({'a': Integer(), 'b': Text()}, instantiator=attrmap)
+        instance = field.instantiate({'a': 1, 'b': 'test'})
+
+        self.assertIsInstance(instance, attrmap)
+        self.assertEqual(instance.a, 1)
+        self.assertEqual(instance.b, 'test')
+
+        instance = field.instantiate({})
+        self.assertIsInstance(instance, attrmap)
+
+        field = Structure({'a': Integer(instantiator=valuewrapper), 'b': Text()}, instantiator=attrmap)
+        instance = field.instantiate({'a': 1, 'b': 'test'})
+
+        self.assertIsInstance(instance, attrmap)
+        self.assertIsInstance(instance.a, valuewrapper)
+        self.assertEqual(instance.a.value, 1)
+        self.assertEqual(instance.b, 'test')
+
+        field = Structure({'a': Integer(), 'b': Text(instantiator=valuewrapper)})
+        instance = field.instantiate({'a': 1, 'b': 'test'})
+
+        self.assertIsInstance(instance, dict)
+        self.assertIsInstance(instance['b'], valuewrapper)
+        self.assertEqual(instance['a'], 1)
+        self.assertEqual(instance['b'].value, 'test')
+
+        field = Structure({
+            'alpha': {'a': Integer()},
+            'beta': {'b': Integer()},
+        }, polymorphic_on=Text(name='identity'), instantiator=attrmap)
+
+        for value in ({'identity': 'alpha', 'a': 1}, {'identity': 'beta', 'b': 2}):
+            instance = field.instantiate(value)
+            self.assertIsInstance(instance, attrmap)
+            self.assertEqual(instance.identity, value['identity'])
 
 class TestText(FieldTestCase):
     def test_specification(self):
@@ -643,21 +826,66 @@ class TestTuple(FieldTestCase):
         f.define(Integer())
         self.assert_processed(field, None, (('', 1, ''), ('', 1, '')))
     
-    def test_extraction(self):
+    def test_naive_extraction(self):
         field = Tuple((Integer(), Text()))
-        value = (1, '1')
+        value = (1, 'test')
 
         extracted = field.extract(value)
         self.assertIsNot(value, extracted)
         self.assertEqual(value, extracted)
 
         field = Tuple((Tuple((Integer(),)), Text()))
-        value = ((1,), '1')
+        value = ((1,), 'test')
 
         extracted = field.extract(value)
         self.assertIsNot(value, extracted)
         self.assertIsNot(value[0], extracted[0])
         self.assertEqual(value, extracted)
+
+    def test_mediated_extraction(self):
+        field = Tuple((Integer(), Text()), extractor=listwrapper.extract)
+        value = listwrapper(None, (1, 'test'))
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, tuple)
+        self.assertEqual(extracted, (1, 'test'))
+
+        field = Tuple((Integer(extractor=valuewrapper.extract), Text()), extractor=listwrapper.extract)
+        value = listwrapper(None, (valuewrapper(None, 1), 'test'))
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, tuple)
+        self.assertEqual(extracted, (1, 'test'))
+
+        field = Tuple((Integer(), Text(extractor=valuewrapper.extract)))
+        value = (1, valuewrapper(None, 'test'))
+        extracted = field.extract(value)
+
+        self.assertIsInstance(extracted, tuple)
+        self.assertEqual(extracted, (1, 'test'))
+
+    def test_instantiation(self):
+        field = Tuple((Integer(), Text()), instantiator=listwrapper)
+        instance = field.instantiate((1, 'test'))
+
+        self.assertIsInstance(instance, listwrapper)
+        self.assertEqual(instance.list, (1, 'test'))
+
+        field = Tuple((Integer(instantiator=valuewrapper), Text()), instantiator=listwrapper)
+        instance = field.instantiate((1, 'test'))
+
+        self.assertIsInstance(instance, listwrapper)
+        self.assertIsInstance(instance.list[0], valuewrapper)
+        self.assertEqual(instance.list[0].value, 1)
+        self.assertEqual(instance.list[1], 'test')
+
+        field = Tuple((Integer(), Text(instantiator=valuewrapper)))
+        instance = field.instantiate((1, 'test'))
+
+        self.assertIsInstance(instance, tuple)
+        self.assertEqual(instance[0], 1)
+        self.assertIsInstance(instance[1], valuewrapper)
+        self.assertEqual(instance[1].value, 'test')
 
 class TestUnion(FieldTestCase):
     def test_specification(self):

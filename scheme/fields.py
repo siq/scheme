@@ -8,7 +8,8 @@ from time import mktime, strptime
 from scheme.exceptions import *
 from scheme.formats import Format
 from scheme.timezone import LOCAL, UTC
-from scheme.util import construct_all_list, format_structure, minimize_string, pluralize
+from scheme.util import (construct_all_list, format_structure, import_object,
+    minimize_string, pluralize)
 
 NATIVELY_SERIALIZABLE = (basestring, bool, float, int, long, type(None), dict, list, tuple)
 PATTERN_TYPE = type(re.compile(''))
@@ -85,6 +86,12 @@ class Field(object):
     :param boolean nonempty: Optional, default is ``False``; if ``True``, is
         equivalent at a minimum to ``nonnull=True`` and ``required=True``;
         subclasses may add behavior.
+
+    :param instantiator: Optional, default is ``None``; specifies an instantiation
+        callback for this field.
+
+    :param extractor: Optional, default is ``None``; specifies an extraction
+        callback for this field.
     """
 
     __metaclass__ = FieldMeta
@@ -99,14 +106,22 @@ class Field(object):
     structural = False
 
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
-        constant=None, errors=None, notes=None, nonempty=False, **params):
+        constant=None, errors=None, notes=None, nonempty=False, instantiator=None,
+        extractor=None, **params):
 
         if nonempty:
             nonnull = required = True
 
+        if isinstance(instantiator, basestring):
+            instantiator = import_object(instantiator)
+        if isinstance(extractor, basestring):
+            extractor = import_object(extractor)
+
         self.constant = constant
         self.default = default
         self.description = description
+        self.extractor = extractor
+        self.instantiator = instantiator
         self.name = name
         self.notes = notes
         self.nonnull = nonnull
@@ -192,7 +207,10 @@ class Field(object):
         return description
 
     def extract(self, subject):
-        raise NotImplementedError()
+        if self.extractor:
+            return self.extractor(self, subject)
+        else:
+            return subject
 
     def filter(self, exclusive=False, **params):
         """Filters this field based on the tests given in ``params``."""
@@ -221,6 +239,12 @@ class Field(object):
 
     def get_error(self, error):
         return self.errors.get(error)
+
+    def instantiate(self, value):
+        if self.instantiator:
+            return self.instantiator(self, value)
+        else:
+            return value
 
     def process(self, value, phase=INCOMING, serialized=False):
         """Processes ``value`` for this field.
@@ -751,15 +775,21 @@ class Map(Field):
 
     def extract(self, subject):
         definition = self.value
-        if definition.structural:
-            extraction = {}
-            for key, value in subject.iteritems():
-                if value is not None:
-                    value = definition.extract(value)
-                extraction[key] = value
-            return extraction
-        else:
-            return subject.copy()
+        if self.extractor:
+            subject = self.extractor(self, subject)
+        if subject is None:
+            return subject
+
+        extraction = {}
+        for key, value in subject.iteritems():
+            extraction[key] = definition.extract(value)
+        return extraction
+
+    def instantiate(self, value):
+        definition = self.value
+        if value is not None:
+            value = dict((k, definition.instantiate(v)) for k, v in value.iteritems())
+        return super(Map, self).instantiate(value)
         
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
@@ -865,15 +895,15 @@ class Sequence(Field):
 
     def extract(self, subject):
         definition = self.item
-        if definition.structural:
-            extraction = []
-            for item in subject:
-                if item is not None:
-                    item = definition.extract(item)
-                extraction.append(item)
-            return extraction
-        else:
-            return list(subject)
+        if self.extractor:
+            subject = self.extractor(self, subject)
+        if subject is None:
+            return subject
+
+        extraction = []
+        for item in subject:
+            extraction.append(definition.extract(item))
+        return extraction
 
     def filter(self, exclusive=False, **params):
         if not super(Sequence, self).filter(exclusive, **params):
@@ -882,6 +912,12 @@ class Sequence(Field):
             return self.clone(item=self.item.filter(exclusive, **params))
         else:
             return self
+
+    def instantiate(self, value):
+        item = self.item
+        if value is not None:
+            value = [item.instantiate(v) for v in value]
+        return super(Sequence, self).instantiate(value)
 
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
@@ -1046,27 +1082,21 @@ class Structure(Field):
                 structure = self._describe_structure(self.structure, parameters))
 
     def extract(self, subject):
-        polymorphic_on = self.polymorphic_on
-        if polymorphic_on:
-            identity = subject.get(polymorphic_on.name)
-            if identity is not None:
-                definition = self.structure.get(identity)
-                if not definition:
-                    raise ValueError()
-            else:
-                raise ValueError()
-        else:
-            definition = self.structure
+        if self.extractor:
+            subject = self.extractor(self, subject)
+        if subject is None:
+            return subject
 
+        definition = self._get_definition(subject)
         extraction = {}
+
         for name, field in definition.iteritems():
             try:
                 value = subject[name]
             except KeyError:
                 continue
-            if value is not None and field.structural:
-                value = field.extract(value)
-            extraction[name] = value
+            else:
+                extraction[name] = field.extract(value)
         return extraction
 
     def filter(self, exclusive=False, **params):
@@ -1089,6 +1119,18 @@ class Structure(Field):
             if field.default is not None:
                 default[name] = field.default
         return default
+
+    def instantiate(self, value):
+        if value is None:
+            return super(Structure, self).instantiate(value)
+
+        definition = self._get_definition(value)
+
+        structure = {}
+        for name, subvalue in value.iteritems():
+            structure[name] = definition[name].instantiate(subvalue)
+
+        return super(Structure, self).instantiate(structure)
 
     def merge(self, structure, prefer=False):
         for name, field in structure.iteritems():
@@ -1184,6 +1226,20 @@ class Structure(Field):
             if field:
                 filtered[name] = field
         return filtered
+
+    def _get_definition(self, value):
+        polymorphic_on = self.polymorphic_on
+        if polymorphic_on:
+            identity = value.get(polymorphic_on.name)
+            if identity is not None:
+                try:
+                    return self.structure[identity]
+                except KeyError:
+                    raise ValueError()
+            else:
+                raise ValueError()
+        else:
+            return self.structure
 
     def _prevalidate_structure(self, structure, identity=None):
         if not isinstance(structure, dict):
@@ -1449,13 +1505,25 @@ class Tuple(Field):
         return super(Tuple, self).describe(parameters, values=values, default=default)
 
     def extract(self, subject):
+        if self.extractor:
+            subject = self.extractor(self, subject)
+        if subject is None:
+            return subject
+
         extraction = []
         for i, definition in enumerate(self.values):
-            value = subject[i]
-            if value is not None and definition.structural:
-                value = definition.extract(value)
-            extraction.append(value)
+            extraction.append(definition.extract(subject[i]))
         return tuple(extraction)
+
+    def instantiate(self, value):
+        if value is None:
+            return super(Tuple, self).instantiate(value)
+
+        sequence = []
+        for i, field in enumerate(self.values):
+            sequence.append(field.instantiate(value[i]))
+
+        return super(Tuple, self).instantiate(tuple(sequence))
 
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
@@ -1535,6 +1603,9 @@ class Union(Field):
             else:
                 raise SchemeError()
         return super(Union, self).describe(parameters, fields=fields)
+
+    def instantiate(self, value):
+        raise NotImplementedError()
 
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):

@@ -32,19 +32,31 @@ def identify_object(obj, cache={}):
         raise TypeError(obj)
 
 def import_object(path):
-    attr = None
     if ':' in path:
         path, attr = path.split(':')
-        return getattr(__import__(path, None, None, [attr]), attr)
+        attrs = attr.split('.')
+        target = __import__(path, None, None, [attrs[0]])
+        for attr in attrs:
+            target = getattr(target, attr)
+        return target
+    elif '.' in path:
+        attrs = []
+        while True:
+            front, sep, back = path.rpartition('.')
+            try:
+                target = __import__(path, None, None, [back])
+            except ImportError:
+                attrs.insert(0, back)
+                path = front
+            else:
+                for attr in attrs:
+                    target = getattr(target, attr)
+                return target
 
-    try:
-        return __import__(path, None, None, [path.split('.')[-1]])
-    except ImportError:
-        if '.' in path:
-            path, attr = path.rsplit('.', 1)
-            return getattr(__import__(path, None, None, [attr]), attr)
-        else:
-            raise
+            if not path:
+                raise ImportError()
+    else:
+        return __import__(path, None, None, [])
 
 def minimize_string(value):
     return re.sub(r'\s+', ' ', value).strip(' ')
