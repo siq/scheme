@@ -1,3 +1,4 @@
+from datetime import date, datetime, time
 from unittest2 import TestCase
 from urllib import unquote
 
@@ -44,6 +45,94 @@ class TestStructuredText(TestCase):
     def test_parsing_numbers(self):
         self.assertEqual(StructuredText.unserialize('1', True), 1)
         self.assertEqual(StructuredText.unserialize('{b:1.2}', True), {'b': 1.2})
+
+SINGLE_DICT = """a: 1
+b: true
+c: something"""
+
+DICT_WITHIN_DICT = """a:
+  b: 1
+  c: true
+d:
+  e: 2
+  f: false"""
+
+SINGLE_LIST = """- 1
+- 2
+- 3"""
+
+LIST_WITHIN_LIST = """- - 1
+  - 2
+- - 3
+  - 4"""
+
+DICT_WITHIN_LIST = """- a: 1
+  b: true
+- a: 2
+  b: false"""
+
+LIST_WITHIN_DICT = """a:
+  - 1
+  - 2
+b:
+  - 3
+  - 4"""
+
+class TestYaml(TestCase):
+    def assert_correct(self, pairs):
+        for unserialized, serialized in pairs:
+            self.assertEqual(Yaml.serialize(unserialized), serialized)
+            self.assertEqual(Yaml.unserialize(serialized), unserialized)
+
+    def assert_serializes(self, unserialized, serialized):
+        self.assertEqual(Yaml.serialize(unserialized), serialized)
+
+    def test_simple_values(self):
+        self.assert_correct([
+            (None, 'null'),
+            (True, 'true'),
+            (False, 'false'),
+            (1, '1'),
+            (1.0, '1.0'),
+            (date(2000, 1, 1), '2000-01-01'),
+            (datetime(2000, 1, 1, 0, 0, 0), '2000-01-01 00:00:00'),
+        ])
+
+    def test_required_quotes(self):
+        self.assert_correct([
+            ('', "''"),
+            ('null', "'null'"),
+            ('Null', "'Null'"),
+            ('NULL', "'NULL'"),
+            ('~', "'~'"),
+            ('true', "'true'"),
+            ('True', "'True'"),
+            ('TRUE', "'TRUE'"),
+            ('false', "'false'"),
+            ('False', "'False'"),
+            ('FALSE', "'FALSE'"),
+        ])
+
+    def test_empty_values(self):
+        self.assert_correct([
+            ({}, '{}'),
+            ([], '[]'),
+        ])
+
+        self.assert_serializes(set(), '[]')
+        self.assert_serializes((), '[]')
+
+    def test_complex_values(self):
+        self.assert_correct([
+            ({'a': 1, 'b': True, 'c': 'something'}, SINGLE_DICT),
+            ({'a': {'b': 1, 'c': True}, 'd': {'e': 2, 'f': False}}, DICT_WITHIN_DICT),
+            ([1, 2, 3], SINGLE_LIST),
+            ([[1, 2], [3, 4]], LIST_WITHIN_LIST),
+            ([{'a': 1, 'b': True}, {'a': 2, 'b': False}], DICT_WITHIN_LIST),
+            ({'a': [1, 2], 'b': [3, 4]}, LIST_WITHIN_DICT),
+        ])
+
+        self.assert_serializes((1, 2, 3), SINGLE_LIST)
 
 class TestUrlEncoded(TestCase):
     def assert_correct(self, pairs):
