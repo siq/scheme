@@ -1,9 +1,9 @@
 import os
 import re
-import textwrap
 from csv import Dialect, DictWriter, QUOTE_ALL
 from cStringIO import StringIO
 from datetime import date, datetime, time
+from textwrap import TextWrapper
 from urllib import urlencode
 
 try:
@@ -246,6 +246,7 @@ class Yaml(Format):
     mimetype = 'application/x-yaml'
     name = 'yaml'
     requires_quotes = ('null', '~', 'true', 'false')
+    whitespace = re.compile(r'^\s*$')
 
     @classmethod
     def serialize(cls, value):
@@ -258,6 +259,20 @@ class Yaml(Format):
     def unserialize(cls, value):
         import yaml
         return yaml.load(value)
+
+    @classmethod
+    def _is_literal_text(cls, value):
+        if '\n' not in value:
+            return False
+
+        whitespace = cls.whitespace
+        for line in value.split('\n'):
+            if not line or whitespace.match(line):
+                continue
+            if line[0] in ' \t\v\f':
+                return True
+        else:
+            return False
 
     @classmethod
     def _serialize_sequence(cls, value, level):
@@ -313,19 +328,25 @@ class Yaml(Format):
             return "'%s'" % value
 
         indent = cls.indent * level
-        if '\n' in value:
+        if cls._is_literal_text(value):
             lines = ['|']
             for line in value.split('\n'):
                 if line:
                     lines.append(indent + line)
                 else:
-                    lines.append(line)
+                    lines.append('')
             return lines
         elif length + len(indent) <= cls.line_width:
             return value
         else:
-            return textwrap.wrap(value, width=cls.line_width, subsequent_indent=indent,
-                break_long_words=False)
+            wrapper = TextWrapper(width=cls.line_width, initial_indent=indent,
+                subsequent_indent=indent, break_long_words=False,
+                replace_whitespace=False, drop_whitespace=False)
+
+            lines = []
+            for line in value.splitlines():
+                lines.extend(wrapper.wrap(line))
+            return lines
 
     @classmethod
     def _serialize_value(cls, value, level):
