@@ -29,7 +29,7 @@ def should_fail(callable, *args, **params):
         assert False, 'exception should be raised'
 
 class attrmap(object):
-    def __init__(self, field, value):
+    def __init__(self, field, value, key=None):
         self.__dict__.update(value)
 
     @classmethod
@@ -37,7 +37,7 @@ class attrmap(object):
         return value.__dict__
 
 class listwrapper(object):
-    def __init__(self, field, value):
+    def __init__(self, field, value, key=None):
         self.list = value
 
     @classmethod
@@ -45,7 +45,7 @@ class listwrapper(object):
         return value.list
 
 class valuewrapper(object):
-    def __init__(self, field, value):
+    def __init__(self, field, value, key=None):
         self.value = value
 
     @classmethod

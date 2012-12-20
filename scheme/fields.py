@@ -245,9 +245,9 @@ class Field(object):
     def get_error(self, error):
         return self.errors.get(error)
 
-    def instantiate(self, value):
+    def instantiate(self, value, key=None):
         if value is not None and self.instantiator:
-            return self.instantiator(self, value)
+            return self.instantiator(self, value, key)
         else:
             return value
 
@@ -790,13 +790,13 @@ class Map(Field):
             extraction[key] = definition.extract(value)
         return extraction
 
-    def instantiate(self, value):
+    def instantiate(self, value, key=None):
         if value is None:
             return None
 
         instantiate = self.value.instantiate
-        value = dict((k, instantiate(v)) for k, v in value.iteritems())
-        return super(Map, self).instantiate(value)
+        value = dict((k, instantiate(v, k)) for k, v in value.iteritems())
+        return super(Map, self).instantiate(value, key)
         
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
@@ -920,13 +920,13 @@ class Sequence(Field):
         else:
             return self
 
-    def instantiate(self, value):
+    def instantiate(self, value, key=None):
         if value is None:
             return None
 
         instantiate = self.item.instantiate
         value = [instantiate(v) for v in value]
-        return super(Sequence, self).instantiate(value)
+        return super(Sequence, self).instantiate(value, key)
 
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
@@ -1129,13 +1129,13 @@ class Structure(Field):
                 default[name] = field.default
         return default
 
-    def instantiate(self, value):
+    def instantiate(self, value, key=None):
         if value is None:
             return None
 
         definition = self._get_definition(value)
         value = dict((k, definition[k].instantiate(v)) for k, v in value.iteritems())
-        return super(Structure, self).instantiate(value)
+        return super(Structure, self).instantiate(value, key)
 
     def merge(self, structure, prefer=False):
         for name, field in structure.iteritems():
@@ -1520,7 +1520,7 @@ class Tuple(Field):
             extraction.append(definition.extract(subject[i]))
         return tuple(extraction)
 
-    def instantiate(self, value):
+    def instantiate(self, value, key=None):
         if value is None:
             return None
 
@@ -1528,7 +1528,7 @@ class Tuple(Field):
         for i, field in enumerate(self.values):
             sequence.append(field.instantiate(value[i]))
 
-        return super(Tuple, self).instantiate(tuple(sequence))
+        return super(Tuple, self).instantiate(tuple(sequence), key)
 
     def process(self, value, phase=INCOMING, serialized=False):
         if self._is_null(value):
