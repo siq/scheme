@@ -265,6 +265,12 @@ class TestDateTime(FieldTestCase):
             self.assert_processed(field, (now, now_text), construct_now(-1))
             self.assert_not_processed(field, 'maximum', construct_now(+1))
 
+class TestDefinition(FieldTestCase):
+    def test_processing(self):
+        field = Definition()
+        self.assert_not_processed(field, 'invalid', True)
+        self.assert_processed(field, None)
+
 class TestEnumeration(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Enumeration([datetime.now()]))
