@@ -107,7 +107,7 @@ class Field(object):
 
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
         constant=None, errors=None, notes=None, nonempty=False, instantiator=None,
-        extractor=None, **params):
+        extractor=None, aspects=None, **params):
 
         if nonempty:
             nonnull = required = True
@@ -122,6 +122,7 @@ class Field(object):
         if extractor:
             extractor = getattr(extractor, '__extract__', extractor)
 
+        self.aspects = aspects or {}
         self.constant = constant
         self.default = default
         self.description = description
@@ -137,8 +138,8 @@ class Field(object):
             self.errors.update(errors)
 
         for attr, value in params.iteritems():
-            if attr[0] != '_':
-                setattr(self, attr, value)
+            if attr[0] != '_' and value is not None:
+                self.aspects[attr] = value
 
     def __repr__(self, params=None, structure=None):
         aspects = []
@@ -165,7 +166,10 @@ class Field(object):
         try:
             return super(Field, self).__getattr__(name)
         except AttributeError:
-            return None
+            try:
+                return self.aspects[name]
+            except KeyError:
+                return None
 
     def clone(self, **params):
         """Clones this field by deep copying it. Keyword parameters are applied to the cloned
@@ -197,6 +201,10 @@ class Field(object):
         parameters are mixed into the description."""
 
         description = {'__type__': self.type}
+        for attr, value in self.aspects.iteritems():
+            if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
+                description[attr] = value
+        
         for source in (self.parameters, parameters):
             if source:
                 for parameter in source:
@@ -204,7 +212,7 @@ class Field(object):
                         value = getattr(self, parameter, None)
                         if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
                             description[parameter] = value
-        
+
         for name, value in params.iteritems():
             if value is not None:
                 description[name] = value
