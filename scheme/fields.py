@@ -1137,6 +1137,13 @@ class Structure(Field):
                 default[name] = field.default
         return default
 
+    def insert(self, field):
+        if not isinstance(field, Field):
+            raise TypeError(field)
+        if not field.name:
+            raise ValueError(field)
+        self.structure[field.name] = field
+
     def instantiate(self, value, key=None):
         if value is None:
             return None
