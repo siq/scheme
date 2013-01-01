@@ -11,6 +11,11 @@ from scheme.timezone import LOCAL, UTC
 from scheme.util import (construct_all_list, format_structure, import_object,
     minimize_string, pluralize)
 
+try:
+    from collections import OrderedDict
+except ImportError:
+    OrderedDict = dict
+
 NATIVELY_SERIALIZABLE = (basestring, bool, float, int, long, type(None), dict, list, tuple)
 PATTERN_TYPE = type(re.compile(''))
 
@@ -92,6 +97,9 @@ class Field(object):
 
     :param extractor: Optional, default is ``None``; specifies an extraction
         callback for this field.
+
+    :param dict aspects: Optional, default is ``None``; if specified, a dictionary
+        with string keys containing extension aspects for this field.
     """
 
     __metaclass__ = FieldMeta
@@ -220,7 +228,9 @@ class Field(object):
         return description
 
     def extract(self, subject):
-        if self.extractor:
+        """Attempts to extract a valid value for this field from ``subject``."""
+
+        if subject is not None and self.extractor:
             return self.extractor(self, subject)
         else:
             return subject
@@ -254,6 +264,9 @@ class Field(object):
         return self.errors.get(error)
 
     def instantiate(self, value, key=None):
+        """Instantiates ``value``, which will be a valid for this field, into another
+        representation, as controlled by the ``instantiator`` aspect."""
+
         if value is not None and self.instantiator:
             return self.instantiator(self, value, key)
         else:
@@ -289,16 +302,25 @@ class Field(object):
         return value
 
     def read(self, path, **params):
+        """Reads the content of the file at ``path``, unserializes it, then processes it
+        as an incoming value for this field."""
+
         data = Format.read(path, **params)
         return self.process(data, INCOMING, True)
 
     def serialize(self, value, format=None, **params):
+        """Serializes ``value`` to ``format``, if specified, after processing it
+        as an outgoing value for this field."""
+
         value = self.process(value, OUTGOING, True)
         if format:
             value = Format.formats[format].serialize(value, **params)
         return value
 
     def unserialize(self, value, format=None, **params):
+        """Unserializes ``value`` from ``format``, if specified, before processing
+        it as an incoming value for this field."""
+
         if format:
             value = Format.formats[format].unserialize(value, **params)
         return self.process(value, INCOMING, True)
@@ -565,7 +587,19 @@ class Definition(Field):
 
     errors = {
         'invalid': '%(field)s must be a field definition',
+        'invalidfield': '%(field)s must be one of %(fields)s',
     }
+
+    def __init__(self, fields=None, **params):
+        super(Definition, self).__init__(**params)
+        if issubclass(fields, Field):
+            fields = (fields,)
+        elif isinstance(fields, list):
+            fields = tuple(fields)
+
+        self.fields = fields
+        if self.fields:
+            self.representation = ', '.join(sorted(field.__name__ for field in self.fields))
 
     def _serialize_value(self, value):
         return value.describe()
@@ -579,6 +613,9 @@ class Definition(Field):
     def _validate_value(self, value):
         if not isinstance(value, Field):
             raise InvalidTypeError(value=value).construct(self, 'invalid')
+        if self.fields and not isinstance(value, self.fields):
+            raise ValidationError(value=value).construct(self, 'invalidfield',
+                fields=self.representation)
 
 class Enumeration(Field):
     """A resource field for enumerated values.
@@ -742,15 +779,17 @@ class Map(Field):
         string.
     """
 
+    key = None
     value = None
     errors = {
         'invalid': '%(field)s must be a map',
+        'invalidkeys': '%(field)s must have valid keys',
         'required': "%(field)s is missing required key '%(name)s'",
     }
     parameters = ('required_keys',)
     structural = True
 
-    def __init__(self, value=None, required_keys=None, **params):
+    def __init__(self, value=None, key=None, required_keys=None, **params):
         super(Map, self).__init__(**params)
         if value is not None:
             self.value = value
@@ -762,6 +801,11 @@ class Map(Field):
         elif not isinstance(self.value, Field):
             raise SchemeError('Map(value) must be a Field instance')
 
+        if key is not None:
+            self.key = key
+        if self.key and not isinstance(self.key, Field):
+            raise SchemeError('Map(key) must be a Field instance')
+
         self.required_keys = required_keys
         if isinstance(self.required_keys, basestring):
             self.required_keys = self.required_keys.split(' ')
@@ -771,6 +815,8 @@ class Map(Field):
     @classmethod
     def construct(cls, specification):
         specification['value'] = Field.reconstruct(specification['value'])
+        if 'key' in specification:
+            specification['key'] = Field.reconstruct(specification['key'])
         return super(Map, cls).construct(specification)
 
     def describe(self, parameters=None):
@@ -783,15 +829,17 @@ class Map(Field):
             for key, value in self.default.iteritems():
                 default[key] = self.value.process(value, OUTGOING, True)
 
-        return super(Map, self).describe(parameters, value=self.value.describe(parameters),
-            default=default)
+        params = {'value': self.value.describe(parameters), 'default': default}
+        if self.key:
+            params['key'] = self.key.describe(parameters)
+        return super(Map, self).describe(parameters, **params)
 
     def extract(self, subject):
         definition = self.value
-        if self.extractor:
-            subject = self.extractor(self, subject)
         if subject is None:
             return subject
+        if self.extractor:
+            subject = self.extractor(self, subject)
 
         extraction = {}
         for key, value in subject.iteritems():
@@ -813,10 +861,19 @@ class Map(Field):
             raise InvalidTypeError(value=value).construct(self, 'invalid')
 
         valid = True
+        key_field = self.key
         value_field = self.value
 
         map = {}
         for name, subvalue in value.iteritems():
+            if key_field:
+                try:
+                    name = key_field.process(name, phase, serialized)
+                except StructuralError, exception:
+                    raise ValidationError(value=value).construct(self, 'invalidkeys')
+            elif not isinstance(name, basestring):
+                raise ValidationError(value=value).construct(self, 'invalidkeys')
+
             try:
                 map[name] = value_field.process(subvalue, phase, serialized)
             except StructuralError, exception:
@@ -839,7 +896,10 @@ class Map(Field):
 
     @classmethod
     def _visit_field(cls, specification, callback):
-        return {'value': callback(specification['value'])}
+        params = {'value': callback(specification['value'])}
+        if 'key' in specification:
+            params['key'] = callback(specification['key'])
+        return params
 
 class Sequence(Field):
     """A resource field for sequences of items.
@@ -910,10 +970,10 @@ class Sequence(Field):
 
     def extract(self, subject):
         definition = self.item
-        if self.extractor:
-            subject = self.extractor(self, subject)
         if subject is None:
             return subject
+        if self.extractor:
+            subject = self.extractor(self, subject)
 
         extraction = []
         for item in subject:
@@ -1011,14 +1071,20 @@ class Structure(Field):
     structure = None
     structural = True
 
-    def __init__(self, structure=None, strict=True, polymorphic_on=None, generate_default=False, **params):
+    def __init__(self, structure=None, strict=True, polymorphic_on=None, generate_default=False, 
+            key_order=None, **params):
+        
         if polymorphic_on:
             if not isinstance(polymorphic_on, Field):
                 raise SchemeError()
             if not polymorphic_on.required:
                 polymorphic_on = polymorphic_on.clone(required=True)
 
+        if isinstance(key_order, basestring):
+            key_order = key_order.split(' ')
+
         super(Structure, self).__init__(**params)
+        self.key_order = key_order
         self.polymorphic_on = polymorphic_on
         self.strict = strict
 
@@ -1099,21 +1165,24 @@ class Structure(Field):
                 structure = self._describe_structure(self.structure, parameters))
 
     def extract(self, subject):
-        if self.extractor:
-            subject = self.extractor(self, subject)
         if subject is None:
             return subject
+        if self.extractor:
+            subject = self.extractor(self, subject)
 
         definition = self._get_definition(subject)
-        extraction = {}
 
+        extraction = {}
         for name, field in definition.iteritems():
             try:
                 value = subject[name]
+                if value is None:
+                    continue
             except KeyError:
                 continue
             else:
                 extraction[name] = field.extract(value)
+
         return extraction
 
     def filter(self, exclusive=False, **params):
@@ -1129,11 +1198,12 @@ class Structure(Field):
         
         return self.clone(structure=structure)
 
-    def generate_default(self):
+    def generate_default(self, sparse=True):
         # todo: support for polymorphic_on
+
         default = {}
         for name, field in self.structure.iteritems():
-            if field.default is not None:
+            if not sparse or field.default is not None:
                 default[name] = field.default
         return default
 
@@ -1171,7 +1241,9 @@ class Structure(Field):
         valid = True
         names = set(value.keys())
 
+        identity = None
         polymorphic_on = self.polymorphic_on
+
         if polymorphic_on:
             identity = value.get(polymorphic_on.name)
             if identity is not None:
@@ -1185,8 +1257,20 @@ class Structure(Field):
         else:
             definition = self.structure
 
-        structure = {}
-        for name, field in definition.iteritems():
+        structure = None
+        if self.key_order:
+            structure = OrderedDict()
+            if identity:
+                key_order = self.key_order[identity]
+            else:
+                key_order = self.key_order
+
+        if structure is None:
+            structure = {}
+            key_order = definition.iterkeys()
+
+        for name in key_order:
+            field = definition[name]
             if name in names:
                 names.remove(name)
                 field_value = value[name]
@@ -1248,18 +1332,31 @@ class Structure(Field):
         return filtered
 
     def _get_definition(self, value):
+        identity = self._get_polymorphic_identity(value)
+        if identity:
+            return self.structure[identity]
+        else:
+            return self.structure
+
+    def _get_key_order(self, value):
+        key_order = self.key_order
+        if not key_order:
+            return None
+
+        identity = self._get_polymorphic_identity(value)
+        if identity:
+            return key_order[identity]
+        else:
+            return key_order
+
+    def _get_polymorphic_identity(self, value):
         polymorphic_on = self.polymorphic_on
         if polymorphic_on:
             identity = value.get(polymorphic_on.name)
             if identity is not None:
-                try:
-                    return self.structure[identity]
-                except KeyError:
-                    raise ValueError()
+                return identity
             else:
-                raise ValueError()
-        else:
-            return self.structure
+                raise ValueError(value)
 
     def _prevalidate_structure(self, structure, identity=None):
         if not isinstance(structure, dict):
@@ -1525,10 +1622,10 @@ class Tuple(Field):
         return super(Tuple, self).describe(parameters, values=values, default=default)
 
     def extract(self, subject):
-        if self.extractor:
-            subject = self.extractor(self, subject)
         if subject is None:
             return subject
+        if self.extractor:
+            subject = self.extractor(self, subject)
 
         extraction = []
         for i, definition in enumerate(self.values):

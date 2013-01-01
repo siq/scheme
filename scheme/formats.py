@@ -22,6 +22,11 @@ try:
 except ImportError:
     from cgi import parse_qsl
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 from scheme.util import construct_all_list, traverse_to_key
 
 class FormatMeta(type):
@@ -257,7 +262,6 @@ class Yaml(Format):
 
     @classmethod
     def unserialize(cls, value):
-        import yaml
         return yaml.load(value)
 
     @classmethod

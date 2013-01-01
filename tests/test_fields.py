@@ -269,7 +269,8 @@ class TestDefinition(FieldTestCase):
     def test_processing(self):
         field = Definition()
         self.assert_not_processed(field, 'invalid', True)
-        self.assert_processed(field, None)
+        self.assert_processed(field, None, Structure())
+
 
 class TestEnumeration(FieldTestCase):
     def test_specification(self):
@@ -372,6 +373,10 @@ class TestMap(FieldTestCase):
 
         expected_error = ValidationError(structure={'a': REQUIRED_ERROR})
         self.assert_not_processed(field, expected_error, {})
+
+    def test_explicit_key(self):
+        field = Map(Integer(), key=Integer())
+        self.assert_processed(field, {1: 1})
 
     def test_undefined_fields(self):
         f = Undefined(Integer())
