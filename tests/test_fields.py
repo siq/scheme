@@ -269,8 +269,7 @@ class TestDefinition(FieldTestCase):
     def test_processing(self):
         field = Definition()
         self.assert_not_processed(field, 'invalid', True)
-        self.assert_processed(field, None, Structure())
-
+        self.assert_processed(field, None)
 
 class TestEnumeration(FieldTestCase):
     def test_specification(self):

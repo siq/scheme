@@ -592,10 +592,11 @@ class Definition(Field):
 
     def __init__(self, fields=None, **params):
         super(Definition, self).__init__(**params)
-        if issubclass(fields, Field):
-            fields = (fields,)
-        elif isinstance(fields, list):
+        if fields:
             fields = tuple(fields)
+            for field in fields:
+                if not (isinstance(field, type) and issubclass(field, Field)):
+                    raise ValueError(fields)
 
         self.fields = fields
         if self.fields:
