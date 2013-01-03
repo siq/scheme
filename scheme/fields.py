@@ -1400,6 +1400,9 @@ class Text(Field):
     :param integer max_length: Optional, default is ``None``; the maximum length of valid
         values for this field.
 
+    :param boolean strip: Optional, default is ``True``; if ``True``, values submitted to this
+        field will have whitespace stripped before validation.
+
     :param boolean nonempty: Optional, default is ``False``; if ``True``, this field will
         be instantiated with ``required=True, nonnull=True, min_length=1``. This is merely
         a shortcut argument.
@@ -1411,10 +1414,13 @@ class Text(Field):
         'min_length': '%(field)s must contain at least %(min_length)d %(noun)s',
         'max_length': '%(field)s may contain at most %(max_length)d %(noun)s',
     }
-    parameters = ('max_length', 'min_length')
+    parameters = ('max_length', 'min_length', 'strip')
     pattern = None
 
-    def __init__(self, pattern=None, min_length=None, max_length=None, nonempty=False, **params):
+    def __init__(self, pattern=None, min_length=None, max_length=None, strip=True,
+            nonempty=False, **params):
+
+        self.strip = strip
         if nonempty:
             params.update(required=True, nonnull=True)
             if min_length is None:
@@ -1456,6 +1462,8 @@ class Text(Field):
     def _validate_value(self, value):
         if not isinstance(value, basestring):
             raise InvalidTypeError(value=value).construct(self, 'invalid')
+        if self.strip:
+            value = value.strip()
         if self.pattern and not self.pattern.match(value):
             raise ValidationError(value=value).construct(self, 'pattern')
 
@@ -1474,6 +1482,8 @@ class Text(Field):
                 noun = 'characters'
             raise ValidationError(value=value).construct(self, 'max_length',
                 max_length=max_length, noun=noun)
+
+        return value
 
 class Time(Field):
     """A resource field for ``time`` values.

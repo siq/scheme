@@ -738,6 +738,13 @@ class TestText(FieldTestCase):
         self.assert_processed(field, None, '', 'testing')
         self.assert_not_processed(field, 4)
 
+    def test_strip(self):
+        field = Text()
+        self.assertEqual(field.process('  '), '')
+
+        field = Text(strip=False)
+        self.assertEqual(field.process('  '), '  ')
+
     def test_pattern(self):
         field = Text(pattern=r'^[abc]*$')
         self.assert_processed(field, '', 'a', 'ab', 'bc', 'abc', 'aabbcc')
@@ -746,6 +753,10 @@ class TestText(FieldTestCase):
     def test_min_length(self):
         field = Text(min_length=2)
         self.assert_processed(field, 'aa', 'aaa')
+        self.assert_not_processed(field, 'min_length', '', 'a', '    ')
+
+        field = Text(min_length=2, strip=False)
+        self.assert_processed(field, 'aa', 'aaa', '   ')
         self.assert_not_processed(field, 'min_length', '', 'a')
 
     def test_max_length(self):
