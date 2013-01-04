@@ -1411,7 +1411,7 @@ class Text(Field):
     errors = {
         'invalid': '%(field)s must be a textual value',
         'pattern': '%(field)s has an invalid value',
-        'min_length': '%(field)s must contain at least %(min_length)d %(noun)s',
+        'min_length': '%(field)s must contain at least %(min_length)d non-whitespace %(noun)s',
         'max_length': '%(field)s may contain at most %(max_length)d %(noun)s',
     }
     parameters = ('max_length', 'min_length', 'strip')
