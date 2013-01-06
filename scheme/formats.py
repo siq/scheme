@@ -65,13 +65,17 @@ class Format(object):
             else:
                 raise ValueError(path)
 
-        extension = os.path.splitext(path)[-1].lower()
-        if extension not in cls.formats:
-            raise Exception()
+        format = cls
+        if not cls.name:
+            extension = os.path.splitext(path)[-1].lower()
+            if extension in cls.formats:
+                format = cls.formats[extension]
+            else:
+                raise Exception()
 
         openfile = open(path)
         try:
-            return cls.formats[extension].unserialize(openfile.read(), **params)
+            return format.unserialize(openfile.read(), **params)
         finally:
             openfile.close()
 
@@ -279,9 +283,20 @@ class Yaml(Format):
             return False
 
     @classmethod
+    def _is_simple_sequence(cls, value):
+        for item in value:
+            if not (item is None or isinstance(item, (bool, float, int))):
+                return False
+        else:
+            return True
+
+    @classmethod
     def _serialize_sequence(cls, value, level):
         if not value:
             return '[]'
+
+        if cls._is_simple_sequence(value):
+            return '[%s]' % ', '.join(cls._serialize_value(v, None) for v in value)
 
         prefix = (cls.indent * level) + '-'
         lines = []
