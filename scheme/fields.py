@@ -1208,11 +1208,13 @@ class Structure(Field):
                 default[name] = field.default
         return default
 
-    def insert(self, field):
+    def insert(self, field, overwrite=False):
         if not isinstance(field, Field):
             raise TypeError(field)
         if not field.name:
             raise ValueError(field)
+        if field.name in self.structure and not overwrite:
+            return
         self.structure[field.name] = field
 
     def instantiate(self, value, key=None):
