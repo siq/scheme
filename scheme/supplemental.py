@@ -30,7 +30,7 @@ class ObjectReference(Field):
                 return import_object(value)
             except ImportError:
                 error = ValidationError(value=value).construct(self, 'import', value=value)
-                return error.capture()
+                raise error.capture()
         else:
             return value
 

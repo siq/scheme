@@ -32,31 +32,40 @@ def identify_object(obj, cache={}):
         raise TypeError(obj)
 
 def import_object(path):
-    if ':' in path:
-        path, attr = path.split(':')
-        attrs = attr.split('.')
-        target = __import__(path, None, None, [attrs[0]])
-        for attr in attrs:
-            target = getattr(target, attr)
-        return target
-    elif '.' in path:
-        attrs = []
-        while True:
-            front, sep, back = path.rpartition('.')
-            try:
-                target = __import__(path, None, None, [back])
-            except ImportError:
-                attrs.insert(0, back)
-                path = front
-            else:
-                for attr in attrs:
-                    target = getattr(target, attr)
-                return target
+    fullpath = path
+    try:
+        if ':' in path:
+            path, attr = path.split(':')
+            attrs = attr.split('.')
+            target = __import__(path, None, None, [attrs[0]])
+            for attr in attrs:
+                target = getattr(target, attr)
+            return target
+        elif '.' in path:
+            attrs = []
+            while True:
+                front, sep, back = path.rpartition('.')
+                try:
+                    target = __import__(path, None, None, [back])
+                except ImportError, exception:
+                    if exception.message == 'No module named %s' % back:
+                        attrs.insert(0, back)
+                        path = front
+                    else:
+                        raise
+                else:
+                    for attr in attrs:
+                        target = getattr(target, attr)
+                    return target
 
-            if not path:
-                raise ImportError()
-    else:
-        return __import__(path, None, None, [])
+                if not path:
+                    raise ImportError()
+        else:
+            return __import__(path, None, None, [])
+    except ImportError:
+        raise
+    except Exception:
+        raise ImportError(fullpath)
 
 def minimize_string(value):
     return re.sub(r'\s+', ' ', value).strip(' ')
