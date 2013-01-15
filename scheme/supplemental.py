@@ -2,7 +2,7 @@ import re
 from types import ModuleType
 
 from scheme.exceptions import *
-from scheme.fields import Field, Text
+from scheme.fields import Field, Error, Text
 from scheme.util import construct_all_list, identify_object, import_object
 
 EMAIL_EXPR = (
@@ -13,10 +13,10 @@ EMAIL_EXPR = (
 class ObjectReference(Field):
     """A resource field for references to python objects."""
 
-    errors = {
-        'invalid': '%(field)s must be a python object',
-        'import': '%(field)s specifies %(value)r, which cannot be imported',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a python object'),
+        Error('import', 'object import', '%(field)s specifies %(value)r, which cannot be imported'),
+    ]
 
     def get_default(self):
         return self.default
@@ -24,12 +24,13 @@ class ObjectReference(Field):
     def _serialize_value(self, value):
         return identify_object(value)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if isinstance(value, basestring):
             try:
                 return import_object(value)
             except ImportError:
-                error = ValidationError(value=value).construct(self, 'import', value=value)
+                error = ValidationError(identity=ancestry, field=self, value=value).construct(
+                    'import', value=value)
                 raise error.capture()
         else:
             return value

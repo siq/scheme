@@ -1,6 +1,6 @@
 from traceback import format_exc
 
-from scheme.util import format_structure
+from scheme.util import format_structure, indent
 
 __all__ = ('InvalidTypeError', 'SchemeError', 'StructuralError', 'ValidationError')
 
@@ -12,6 +12,8 @@ class StructuralError(SchemeError):
 
     def __init__(self, *errors, **params):
         self.errors = list(errors)
+        self.field = params.pop('field', None)
+        self.identity = params.pop('identity', None)
         self.structure = params.pop('structure', None)
         self.tracebacks = None
         self.value = params.pop('value', None)
@@ -20,10 +22,7 @@ class StructuralError(SchemeError):
             self.errors.append(params)
 
     def __str__(self):
-        content = '\n' + self.format_errors()
-        if self.tracebacks:
-            content += 'Captured tracebacks:\n' + '\n'.join(self.tracebacks)
-        return content
+        return '\n'.join(['validation failed'] + self.format_errors())
 
     @property
     def substantive(self):
@@ -45,7 +44,17 @@ class StructuralError(SchemeError):
         return self
 
     def format_errors(self):
-        return format_structure(self.serialize())
+        errors = []
+        if self.errors:
+            self._format_errors(errors)
+        if self.structure:
+            self._format_structure(errors)
+
+        enumerated_errors = []
+        for i, error in enumerate(errors):
+            enumerated_errors.append('[%02d] %s' % (i + 1, indent(error, 5, False)))
+
+        return enumerated_errors
 
     def merge(self, exception):
         self.errors.extend(exception.errors)
@@ -70,6 +79,46 @@ class StructuralError(SchemeError):
 
         self._serialized_errors = [errors, structure]
         return self._serialized_errors
+
+    def _format_errors(self, errors):
+        field = self.field
+        if not field:
+            return
+
+        identity = ''.join(self.identity)
+        for error in self.errors:
+            definition = field.errors[error['token']]
+            lines = ['%s error at %s: %s' % (error['title'].capitalize(), identity,
+                error['message'])]
+
+            if definition.show_field:
+                lines.append('Field: %r' % field)
+
+            if definition.show_value and self.value is not None:
+                lines.append('Value: %r' % self.value)
+
+            if self.tracebacks:
+                lines.append('Captured tracebacks:')
+                for traceback in self.tracebacks:
+                    lines.append(indent(traceback, 2))
+
+            errors.append('\n'.join(lines))
+
+    def _format_structure(self, errors):
+        if isinstance(self.structure, list):
+            for item in self.structure:
+                if isinstance(item, StructuralError):
+                    if item.structure is not None:
+                        item._format_structure(errors)
+                    else:
+                        item._format_errors(errors)
+        elif isinstance(self.structure, dict):
+            for value in self.structure.itervalues():
+                if isinstance(value, StructuralError):
+                    if value.structure is not None:
+                        value._format_structure(errors)
+                    else:
+                        value._format_errors(errors)
 
     def _serialize_errors(self, errors):
         serialized = []
@@ -107,13 +156,10 @@ class StructuralError(SchemeError):
 class ValidationError(StructuralError):
     """Raised when validation fails."""
 
-    def construct(self, field, error, **params):
-        message = field.get_error(error)
-        if message:
-            params['field'] = field.name or 'unknown-field'
-            return self.append({'token': error, 'message': message % params})
-        else:
-            raise KeyError(error)
+    def construct(self, error, **params):
+        error = self.field.errors[error]
+        return self.append({'token': error.token, 'title': error.title,
+            'message': error.format(self.field, params)})
 
 class InvalidTypeError(ValidationError):
     """A validation error indicating the value being processed is invalid due

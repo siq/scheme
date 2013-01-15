@@ -67,6 +67,20 @@ def import_object(path):
     except Exception:
         raise ImportError(fullpath)
 
+def indent(text, indent, indent_first=True):
+    if isinstance(indent, int):
+        indent = ' ' * indent
+
+    lines = []
+    candidates = text.split('\n')
+
+    if not indent_first:
+        lines.append(candidates.pop(0))
+
+    for line in candidates:
+        lines.append(indent + line)
+    return '\n'.join(lines)
+
 def minimize_string(value):
     return re.sub(r'\s+', ' ', value).strip(' ')
 

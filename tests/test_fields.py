@@ -493,7 +493,7 @@ class TestSequence(FieldTestCase):
     def test_unique(self):
         field = Sequence(Integer(), unique=True)
         self.assert_processed(field, [], [1], [1, 2])
-        self.assert_not_processed(field, 'unique', [1, 1])
+        self.assert_not_processed(field, 'duplicate', [1, 1])
 
     def test_undefined_fields(self):
         f = Undefined(Integer())

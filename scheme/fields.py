@@ -8,8 +8,8 @@ from time import mktime, strptime
 from scheme.exceptions import *
 from scheme.formats import Format
 from scheme.timezone import LOCAL, UTC
-from scheme.util import (construct_all_list, format_structure, import_object,
-    minimize_string, pluralize)
+from scheme.util import (construct_all_list, format_structure, identify_object,
+    import_object, minimize_string, pluralize)
 
 try:
     from collections import OrderedDict
@@ -22,9 +22,24 @@ PATTERN_TYPE = type(re.compile(''))
 INCOMING = 'incoming'
 OUTGOING = 'outgoing'
 
+class Error(object):
+    """A field error."""
+
+    def __init__(self, token, title, message, show_field=True, show_value=True):
+        self.message = message
+        self.show_field = show_field
+        self.show_value = show_value
+        self.title = title
+        self.token = token
+
+    def format(self, field, params):
+        if 'field' not in params:
+            params['field'] = field.name or 'unknown-field'
+        return self.message % params
+
 class FieldMeta(type):
     def __new__(metatype, name, bases, namespace):
-        declared_errors = namespace.pop('errors', {})
+        declared_errors = namespace.pop('errors', ())
         declared_parameters = namespace.pop('parameters', ())
 
         field = type.__new__(metatype, name, bases, namespace)
@@ -41,8 +56,9 @@ class FieldMeta(type):
             if inherited_parameters:
                 parameters.update(inherited_parameters)
 
-        errors.update(declared_errors)
         field.errors = errors
+        for error in declared_errors:
+            errors[error.token] = error
 
         parameters.update(declared_parameters)
         field.parameters = parameters
@@ -105,10 +121,10 @@ class Field(object):
     __metaclass__ = FieldMeta
     types = {}
 
-    errors = {
-        'invalid': '%(field)s has an invalid value',
-        'nonnull': '%(field)s must be a non-null value',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s is an invalid value'),
+        Error('nonnull', 'null value', '%(field)s must be a non-null value'),
+    ]
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
         'required', 'notes', 'structural')
     structural = False
@@ -143,7 +159,8 @@ class Field(object):
 
         if errors:
             self.errors = self.errors.copy()
-            self.errors.update(errors)
+            for error in errors:
+                self.errors[error.token] = error
 
         for attr, value in params.iteritems():
             if attr[0] != '_' and value is not None:
@@ -178,6 +195,10 @@ class Field(object):
                 return self.aspects[name]
             except KeyError:
                 return None
+
+    @property
+    def guaranteed_name(self):
+        return self.name or '(%s)' % self.type
 
     def clone(self, **params):
         """Clones this field by deep copying it. Keyword parameters are applied to the cloned
@@ -260,9 +281,6 @@ class Field(object):
             default = default()
         return default
 
-    def get_error(self, error):
-        return self.errors.get(error)
-
     def instantiate(self, value, key=None):
         """Instantiates ``value``, which will be a valid for this field, into another
         representation, as controlled by the ``instantiator`` aspect."""
@@ -272,7 +290,7 @@ class Field(object):
         else:
             return value
 
-    def process(self, value, phase=INCOMING, serialized=False):
+    def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         """Processes ``value`` for this field.
 
         :param value: The value to process.
@@ -285,15 +303,18 @@ class Field(object):
             ``value`` should either be unserialized before validation, if ``phase`` is
             ``incoming``, or serialized after validation, if ``phase`` is ``outgoing``.
         """
-    
-        if self._is_null(value):
+
+        if not ancestry:
+            ancestry = [self.guaranteed_name]
+
+        if self._is_null(value, ancestry):
             return None
         if serialized and phase == INCOMING:
-            value = self._unserialize_value(value)
+            value = self._unserialize_value(value, ancestry)
         if self.constant is not None and value != self.constant:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
-        candidate = self._validate_value(value)
+        candidate = self._validate_value(value, ancestry)
         if candidate is not None:
             value = candidate
 
@@ -333,10 +354,10 @@ class Field(object):
         value = self.process(value, OUTGOING, True)
         Format.write(path, value, format, **params)
 
-    def _is_null(self, value):
+    def _is_null(self, value, ancestry):
         if value is None:
             if self.nonnull:
-                raise ValidationError().construct(self, 'nonnull')
+                raise ValidationError(identity=ancestry, field=self).construct('nonnull')
             else:
                 return True
 
@@ -345,10 +366,10 @@ class Field(object):
 
         return value
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         return value
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         """Validates ``value`` according to the parameters of this field."""
 
         return value
@@ -360,11 +381,11 @@ class Field(object):
 class Binary(Field):
     """A resource field for binary values."""
 
-    errors = {
-        'invalid': '%(field)s must be a binary value',
-        'min_length': '%(field)s must contain at least %(min_length)d %(noun)s',
-        'max_length': '%(field)s may contain at most %(max_length)d %(noun)s',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a binary value'),
+        Error('min_length', 'minimum length', '%(field)s must contain at least %(min_length)d %(noun)s'),
+        Error('max_length', 'maximum length', '%(field)s must contain at most %(max_length)d %(noun)s'),
+    ]
     parameters = ('max_length', 'min_length')
 
     def __init__(self, min_length=None, max_length=None, nonempty=False, **params):
@@ -387,39 +408,41 @@ class Binary(Field):
     def _serialize_value(self, value):
         return urlsafe_b64encode(value)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if not isinstance(value, basestring):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
         return urlsafe_b64decode(value)
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, basestring):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         min_length = self.min_length
         if min_length is not None and len(value) < min_length:
             noun = 'byte'
             if min_length > 1:
                 noun = 'bytes'
-            raise ValidationError(value=value).construct(self, 'min_length',
-                min_length=min_length, noun=noun)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'min_length', min_length=min_length, noun=noun)
 
         max_length = self.max_length
         if max_length is not None and len(value) > max_length:
             noun = 'byte'
             if max_length > 1:
                 noun = 'bytes'
-            raise ValidationError(value=value).construct(self, 'max_length',
-                max_length=max_length, noun=noun)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'max_length', max_length=max_length, noun=noun)
 
 class Boolean(Field):
     """A resource field for ``boolean`` values."""
 
-    errors = {'invalid': '%(field)s must be a boolean value'}
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a boolean value'),
+    ]
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, bool):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
 class Date(Field):
     """A resource field for ``date`` values.
@@ -433,11 +456,11 @@ class Date(Field):
     parameters = ('maximum', 'minimum')
     pattern = '%Y-%m-%d'
 
-    errors = {
-        'invalid': '%(field)s must be a date value',
-        'minimum': '%(field)s must not occur before %(minimum)s',
-        'maximum': '%(field)s must not occur after %(maximum)s',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a date value'),
+        Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
+        Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
+    ]
 
     def __init__(self, minimum=None, maximum=None, **params):
         super(Date, self).__init__(**params)
@@ -455,34 +478,34 @@ class Date(Field):
     def _serialize_value(self, value):
         return value.strftime(self.pattern)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if isinstance(value, date):
             return value
 
         try:
             return date(*strptime(value, self.pattern)[:3])
         except Exception:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, date):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         minimum = self.minimum
         if minimum is not None:
             if callable(minimum):
                 minimum = minimum()
             if value < minimum:
-                raise ValidationError(value=value).construct(self, 'minimum',
-                    minimum=minimum.strftime(self.pattern))
+                raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                    'minimum', minimum=minimum.strftime(self.pattern))
 
         maximum = self.maximum
         if maximum is not None:
             if callable(maximum):
                 maximum = maximum()
             if value > maximum:
-                raise ValidationError(value=value).construct(self, 'maximum',
-                    maximum=maximum.strftime(self.pattern))
+                raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                    'maximum', maximum=maximum.strftime(self.pattern))
 
 class DateTime(Field):
     """A resource field for ``datetime`` values.
@@ -509,11 +532,11 @@ class DateTime(Field):
     parameters = ('maximum', 'minimum', 'utc')
     pattern = '%Y-%m-%dT%H:%M:%SZ'
 
-    errors = {
-        'invalid': '%(field)s must be a datetime value',
-        'minimum': '%(field)s must not occur before %(minimum)s',
-        'maximum': '%(field)s must not occur after %(maximum)s',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a datetime value'),
+        Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
+        Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
+    ]
 
     def __init__(self, minimum=None, maximum=None, utc=False, **params):
         super(DateTime, self).__init__(**params)
@@ -548,7 +571,7 @@ class DateTime(Field):
     def _serialize_value(self, value):
         return value.astimezone(UTC).strftime(self.pattern)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if isinstance(value, datetime):
             return value
 
@@ -556,11 +579,11 @@ class DateTime(Field):
             unserialized = datetime(*strptime(value, self.pattern)[:6])
             return unserialized.replace(tzinfo=UTC)
         except Exception:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, datetime):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         value = self._normalize_value(value)
 
@@ -569,26 +592,26 @@ class DateTime(Field):
             if callable(minimum):
                 minimum = self._normalize_value(minimum())
             if value < minimum:
-                raise ValidationError(value=value).construct(self, 'minimum',
-                    minimum=minimum.strftime(self.pattern))
+                raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                    'minimum', minimum=minimum.strftime(self.pattern))
 
         maximum = self.maximum
         if maximum is not None:
             if callable(maximum):
                 maximum = self._normalize_value(maximum())
             if value > maximum:
-                raise ValidationError(value=value).construct(self, 'maximum',
-                    maximum=maximum.strftime(self.pattern))
+                raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                    'maximum', maximum=maximum.strftime(self.pattern))
 
         return value
 
 class Definition(Field):
     """A field for field definitions."""
 
-    errors = {
-        'invalid': '%(field)s must be a field definition',
-        'invalidfield': '%(field)s must be one of %(fields)s',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a field definition'),
+        Error('invalidfield', 'invalid field', '%(field)s must be one of %(fields)s'),
+    ]
 
     def __init__(self, fields=None, **params):
         super(Definition, self).__init__(**params)
@@ -605,18 +628,18 @@ class Definition(Field):
     def _serialize_value(self, value):
         return value.describe()
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         try:
             return Field.reconstruct(value)
         except Exception:
-            raise ValidationError(value=value).construct(self, 'invalid')
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('invalid')
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, Field):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
         if self.fields and not isinstance(value, self.fields):
-            raise ValidationError(value=value).construct(self, 'invalidfield',
-                fields=self.representation)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'invalidfield', fields=self.representation)
 
 class Enumeration(Field):
     """A resource field for enumerated values.
@@ -626,7 +649,9 @@ class Enumeration(Field):
         also be specified as a single space-delimited string.
     """
 
-    errors = {'invalid': '%(field)s must be one of %(values)s'}
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be one of %(values)s')
+    ]
     parameters = ('enumeration',)
 
     def __init__(self, enumeration, **params):
@@ -646,9 +671,10 @@ class Enumeration(Field):
     def __repr__(self):
         return super(Enumeration, self).__repr__(['enumeration=[%s]' % self.representation])
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if value not in self.enumeration:
-            raise InvalidTypeError(value=value).construct(self, 'invalid', values=self.representation)
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid',
+                values=self.representation)
 
 class Float(Field):
     """A resource field for ``float`` values.
@@ -660,11 +686,11 @@ class Float(Field):
         for this field.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a floating-point number',
-        'minimum': '%(field)s must be greater then or equal to %(minimum)f',
-        'maximum': '%(field)s must be less then or equal to %(maximum)f',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a floating-point number'),
+        Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)f'),
+        Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)f'),
+    ]
     parameters = ('maximum', 'minimum')
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -687,26 +713,28 @@ class Float(Field):
             aspects.append('maximum=%r' % self.maximum)
         return super(Float, self).__repr__(aspects)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if isinstance(value, float):
             return value
 
         try:
             return float(value)
         except Exception:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, float):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         minimum = self.minimum
         if minimum is not None and value < minimum:
-            raise ValidationError(value=value).construct(self, 'minimum', minimum=minimum)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'minimum', minimum=minimum)
 
         maximum = self.maximum
         if maximum is not None and value > maximum:
-            raise ValidationError(value=value).construct(self, 'maximum', maximum=maximum)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'maximum', maximum=maximum)
 
 class Integer(Field):
     """A resource field for ``integer`` values.
@@ -718,11 +746,11 @@ class Integer(Field):
         for this field.
     """
 
-    errors = {
-        'invalid': '%(field)s must be an integer',
-        'minimum': '%(field)s must be greater then or equal to %(minimum)d',
-        'maximum': '%(field)s must be less then or equal to %(maximum)d',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be an integer'),
+        Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)d'),
+        Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)d'),
+    ]
     parameters = ('maximum', 'minimum')
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -745,28 +773,30 @@ class Integer(Field):
             aspects.append('maximum=%r' % self.maximum)
         return super(Integer, self).__repr__(aspects)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if value is True or value is False:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
         elif isinstance(value, int):
             return value
 
         try:
             return int(value)
         except Exception:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if value is True or value is False or not isinstance(value, (int, long)):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         minimum = self.minimum
         if minimum is not None and value < minimum:
-            raise ValidationError(value=value).construct(self, 'minimum', minimum=minimum)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('minimum',
+                minimum=minimum)
 
         maximum = self.maximum
         if maximum is not None and value > maximum:
-            raise ValidationError(value=value).construct(self, 'maximum', maximum=maximum)
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('maximum',
+                maximum=maximum)
 
 class Map(Field):
     """A resource field for mappings of key/value pairs.
@@ -782,11 +812,11 @@ class Map(Field):
 
     key = None
     value = None
-    errors = {
-        'invalid': '%(field)s must be a map',
-        'invalidkeys': '%(field)s must have valid keys',
-        'required': "%(field)s is missing required key '%(name)s'",
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a map'),
+        Error('invalidkeys', 'invalid keys', '%(field)s must have valid keys'),
+        Error('required', 'required key', "%(field)s is missing required key '%(name)s'"),
+    ]
     parameters = ('required_keys',)
     structural = True
 
@@ -855,11 +885,14 @@ class Map(Field):
         value = dict((k, instantiate(v, k)) for k, v in value.iteritems())
         return super(Map, self).instantiate(value, key)
         
-    def process(self, value, phase=INCOMING, serialized=False):
-        if self._is_null(value):
+    def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
+        if not ancestry:
+            ancestry = [self.guaranteed_name]
+
+        if self._is_null(value, ancestry):
             return None
         if not isinstance(value, dict):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         valid = True
         key_field = self.key
@@ -869,14 +902,14 @@ class Map(Field):
         for name, subvalue in value.iteritems():
             if key_field:
                 try:
-                    name = key_field.process(name, phase, serialized)
+                    name = key_field.process(name, phase, serialized, ancestry + ['[%s]' % name])
                 except StructuralError, exception:
-                    raise ValidationError(value=value).construct(self, 'invalidkeys')
+                    raise ValidationError(identity=ancestry, field=self, value=value).construct('invalidkeys')
             elif not isinstance(name, basestring):
-                raise ValidationError(value=value).construct(self, 'invalidkeys')
+                raise ValidationError(identity=ancestry, field=self, value=value).construct('invalidkeys')
 
             try:
-                map[name] = value_field.process(subvalue, phase, serialized)
+                map[name] = value_field.process(subvalue, phase, serialized, ancestry + ['[%s]' % name])
             except StructuralError, exception:
                 valid = False
                 map[name] = exception
@@ -885,12 +918,13 @@ class Map(Field):
             for name in self.required_keys:
                 if name not in map:
                     valid = False
-                    map[name] = ValidationError().construct(self, 'required', name=name)
+                    map[name] = ValidationError(identity=ancestry, field=self).construct(
+                        'required', name=name)
 
         if valid:
             return map
         else:
-            raise ValidationError(value=value, structure=map)
+            raise ValidationError(identity=ancestry, field=self, value=value, structure=map)
 
     def _define_undefined_field(self, field):
         self.value = field
@@ -901,6 +935,30 @@ class Map(Field):
         if 'key' in specification:
             params['key'] = callback(specification['key'])
         return params
+
+class Object(Field):
+    """A resource field for references to python objects."""
+
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a python object'),
+        Error('import', 'object import', 'cannot import %(value)r'),
+    ]
+
+    def get_default(self):
+        return self.default
+
+    def _serialize_value(self, value):
+        return identify_object(value)
+
+    def _unserialize_value(self, value, ancestry):
+        if isinstance(value, basestring):
+            try:
+                return import_object(value)
+            except ImportError:
+                error = ValidationError(identity=ancestry, field=self, value=value)
+                raise error.construct('import', value=value).capture()
+        else:
+            return value
 
 class Sequence(Field):
     """A resource field for sequences of items.
@@ -919,12 +977,12 @@ class Sequence(Field):
         the sequence cannot contain duplicate values.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a sequence',
-        'min_length': '%(field)s must have at least %(min_length)d %(noun)s',
-        'max_length': '%(field)s must have at most %(max_length)d %(noun)s',
-        'unique': '%(field)s must not have duplicate values',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a sequence'),
+        Error('min_length', 'minimum length', '%(field)s must have at least %(min_length)d %(noun)s'),
+        Error('max_length', 'maximum length', '%(field)s must have at most %(max_length)d %(noun)s'),
+        Error('duplicate', 'duplicate value', '%(field)s must not have duplicate values'),
+    ]
     item = None
     parameters = ('min_length', 'max_length', 'unique')
     structural = True
@@ -997,37 +1055,40 @@ class Sequence(Field):
         value = [instantiate(v) for v in value]
         return super(Sequence, self).instantiate(value, key)
 
-    def process(self, value, phase=INCOMING, serialized=False):
-        if self._is_null(value):
+    def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
+        if not ancestry:
+            ancestry = [self.guaranteed_name]
+
+        if self._is_null(value, ancestry):
             return None
         if not isinstance(value, list):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         min_length = self.min_length
         if min_length is not None and len(value) < min_length:
-            raise ValidationError(value=value).construct(self, 'min_length',
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('min_length',
                 min_length=min_length, noun=pluralize('item', min_length))
 
         max_length = self.max_length
         if max_length is not None and len(value) > max_length:
-            raise ValidationError(value=value).construct(self, 'max_length',
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('max_length',
                 max_length=max_length, noun=pluralize('item', max_length))
 
         valid = True
         item = self.item
 
         sequence = []
-        for subvalue in value:
+        for i, subvalue in enumerate(value):
             try:
-                sequence.append(item.process(subvalue, phase, serialized))
+                sequence.append(item.process(subvalue, phase, serialized, ancestry + ['[%s]' % i]))
             except StructuralError, exception:
                 valid = False
                 sequence.append(exception)
 
         if not valid:
-            raise ValidationError(value=value, structure=sequence)
+            raise ValidationError(identity=ancestry, field=self, value=value, structure=sequence)
         elif self.unique and len(set(sequence)) != len(sequence):
-            raise ValidationError(value=value).construct(self, 'unique')
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('duplicate')
         else:
             return sequence
 
@@ -1062,12 +1123,13 @@ class Structure(Field):
         values, if any, of the fields specified within ``structure`` into a ``dict``.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a structure',
-        'required': "%(field)s is missing required field '%(name)s'",
-        'unknown': "%(field)s includes an unknown field '%(name)s'",
-        'unrecognized': "%(field)s must specify a recognized polymorphic identity",
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a structure'),
+        Error('required', 'required field', "%(field)s is missing required field '%(name)s'"),
+        Error('unknown', 'unknown field', "%(field)s includes an unknown field '%(name)s'"),
+        Error('unrecognized', 'unrecognized polymorphic identity',
+            "%(field)s must specify a recognized polymorphic identity"),
+    ]
     parameters = ('strict',)
     structure = None
     structural = True
@@ -1235,11 +1297,14 @@ class Structure(Field):
                 field = field.clone(name=name)
             self.structure[name] = field
 
-    def process(self, value, phase=INCOMING, serialized=False, partial=False):
-        if self._is_null(value):
+    def process(self, value, phase=INCOMING, serialized=False, ancestry=None, partial=False):
+        if not ancestry:
+            ancestry = [self.guaranteed_name]
+
+        if self._is_null(value, ancestry):
             return None
         if not isinstance(value, dict):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         valid = True
         names = set(value.keys())
@@ -1250,13 +1315,15 @@ class Structure(Field):
         if polymorphic_on:
             identity = value.get(polymorphic_on.name)
             if identity is not None:
-                identity = polymorphic_on.process(identity, phase, serialized)
+                identity = polymorphic_on.process(identity, phase, serialized,
+                    ancestry + ['.' + polymorphic_on.name])
             else:
-                raise ValidationError().construct(self, 'required', name=polymorphic_on.name)
+                raise ValidationError(identity=ancestry, field=self).construct('required',
+                    name=polymorphic_on.name)
 
             definition = self.structure.get(identity)
             if not definition:
-                raise ValidationError().construct(self, 'unrecognized')
+                raise ValidationError(identity=ancestry, field=self, value=identity).construct('unrecognized')
         else:
             definition = self.structure
 
@@ -1283,13 +1350,15 @@ class Structure(Field):
                 field_value = field.get_default()
             elif field.required:
                 valid = False
-                structure[name] = ValidationError().construct(self, 'required', name=name)
+                structure[name] = ValidationError(identity=ancestry, field=self).construct(
+                    'required', name=name)
                 continue
             else:
                 continue
 
             try:
-                structure[name] = field.process(field_value, phase, serialized)
+                structure[name] = field.process(field_value, phase, serialized,
+                    ancestry + ['.' + name])
             except StructuralError, exception:
                 valid = False
                 structure[name] = exception
@@ -1297,12 +1366,13 @@ class Structure(Field):
         if self.strict:
             for name in names:
                 valid = False
-                structure[name] = ValidationError().construct(self, 'unknown', name=name)
+                structure[name] = ValidationError(identity=ancestry, field=self).construct(
+                    'unknown', name=name)
 
         if valid:
             return structure
         else:
-            raise ValidationError(value=value, structure=structure)
+            raise ValidationError(identity=ancestry, field=self, value=value, structure=structure)
 
     def _define_undefined_field(self, field, name):
         identity, name = name
@@ -1410,12 +1480,14 @@ class Text(Field):
         a shortcut argument.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a textual value',
-        'pattern': '%(field)s has an invalid value',
-        'min_length': '%(field)s must contain at least %(min_length)d non-whitespace %(noun)s',
-        'max_length': '%(field)s may contain at most %(max_length)d %(noun)s',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a textual value'),
+        Error('pattern', 'invalid value', '%(field)s has an invalid value'),
+        Error('min_length', 'minimum length', 
+            '%(field)s must contain at least %(min_length)d non-whitespace %(noun)s'),
+        Error('max_length', 'maximum length',
+            '%(field)s may contain at most %(max_length)d %(noun)s'),
+    ]
     parameters = ('max_length', 'min_length', 'strip')
     pattern = None
 
@@ -1461,20 +1533,20 @@ class Text(Field):
             pattern = None
         return super(Text, self).describe(parameters, pattern=pattern)
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, basestring):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
         if self.strip:
             value = value.strip()
         if self.pattern and not self.pattern.match(value):
-            raise ValidationError(value=value).construct(self, 'pattern')
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('pattern')
 
         min_length = self.min_length
         if min_length is not None and len(value) < min_length:
             noun = 'character'
             if min_length > 1:
                 noun = 'characters'
-            raise ValidationError(value=value).construct(self, 'min_length',
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('min_length',
                 min_length=min_length, noun=noun)
 
         max_length = self.max_length
@@ -1482,7 +1554,7 @@ class Text(Field):
             noun = 'character'
             if max_length > 1:
                 noun = 'characters'
-            raise ValidationError(value=value).construct(self, 'max_length',
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('max_length',
                 max_length=max_length, noun=noun)
 
         return value
@@ -1497,11 +1569,11 @@ class Time(Field):
         either a ``time`` or a callable which returns a ``time``.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a time value',
-        'minimum': '%(field)s must not occur before %(minimum)s',
-        'maximum': '%(field)s must not occur after %(maximum)s',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a time value'),
+        Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
+        Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
+    ]
     parameters = ('maximum', 'minimum')
     pattern = '%H:%M:%S'
 
@@ -1521,25 +1593,25 @@ class Time(Field):
     def _serialize_value(self, value):
         return value.strftime(self.pattern)
 
-    def _unserialize_value(self, value):
+    def _unserialize_value(self, value, ancestry):
         if isinstance(value, time):
             return value
 
         try:
             return time(*strptime(value, self.pattern)[3:6])
         except Exception:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not isinstance(value, time):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         minimum = self.minimum
         if minimum is not None:
             if callable(minimum):
                 minimum = minimum()
             if value < minimum:
-                raise ValidationError(value=value).construct(self, 'minimum',
+                raise ValidationError(identity=ancestry, field=self, value=value).construct('minimum',
                     minimum=minimum.strftime(self.pattern))
 
         maximum = self.maximum
@@ -1547,7 +1619,7 @@ class Time(Field):
             if callable(maximum):
                 maximum = maximum()
             if value > maximum:
-                raise ValidationError(value=value).construct(self, 'maximum',
+                raise ValidationError(identity=ancestry, field=self, value=value).construct('maximum',
                     maximum=maximum.strftime(self.pattern))
 
 class Token(Field):
@@ -1560,20 +1632,20 @@ class Token(Field):
         number of segments that valid values for this field must have.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a valid token'
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a valid token')
+    ]
     pattern = re.compile(r'^\w[-+.\w]*(?<=\w)(?::\w[-+.\w]*(?<=\w))*$')
 
     def __init__(self, segments=None, **params):
         super(Token, self).__init__(**params)
         self.segments = segments
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not (isinstance(value, basestring) and self.pattern.match(value)):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
         if self.segments is not None and value.count(':') + 1 != self.segments:
-            raise ValidationError(value=value).construct(self, 'invalid')
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('invalid')
 
 class Tuple(Field):
     """A resource field for tuples of values.
@@ -1583,10 +1655,10 @@ class Tuple(Field):
         ``values`` at the class level.
     """
 
-    errors = {
-        'invalid': '%(field)s must be a tuple',
-        'length': '%(field)s must contain exactly %(length)d values',
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a tuple'),
+        Error('length', 'invalid length', '%(field)s must contain exactly %(length)d values'),
+    ]
     structural = True
     values = None
 
@@ -1655,22 +1727,26 @@ class Tuple(Field):
 
         return super(Tuple, self).instantiate(tuple(sequence), key)
 
-    def process(self, value, phase=INCOMING, serialized=False):
-        if self._is_null(value):
+    def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
+        if not ancestry:
+            ancestry = [self.guaranteed_name]
+
+        if self._is_null(value, ancestry):
             return None
         if not isinstance(value, (list, tuple)):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
         values = self.values
         if len(value) != len(values):
-            raise ValidationError(value=value).construct(self, 'length', length=len(values))
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'length', length=len(values))
 
         valid = True
         sequence = []
 
         for i, field in enumerate(values):
             try:
-                sequence.append(field.process(value[i], phase, serialized))
+                sequence.append(field.process(value[i], phase, serialized, ancestry + ['[%s]' % i]))
             except StructuralError, exception:
                 valid = False
                 sequence.append(exception)
@@ -1678,7 +1754,7 @@ class Tuple(Field):
         if valid:
             return tuple(sequence)
         else:
-            raise ValidationError(value=value, structure=sequence)
+            raise ValidationError(identity=ancestry, field=self, value=value, structure=sequence)
 
     def _define_undefined_field(self, field, idx):
         self.values = tuple(list(self.values[:idx]) + [field] + list(self.values[idx + 1:]))
@@ -1737,17 +1813,20 @@ class Union(Field):
     def instantiate(self, value):
         raise NotImplementedError()
 
-    def process(self, value, phase=INCOMING, serialized=False):
-        if self._is_null(value):
+    def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
+        if not ancestry:
+            ancestry = [self.guaranteed_name]
+
+        if self._is_null(value, ancestry):
             return None
 
         for field in self.fields:
             try:
-                return field.process(value, phase, serialized)
+                return field.process(value, phase, serialized, ancestry)
             except InvalidTypeError:
                 pass
         else:
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
     def _define_undefined_field(self, field, idx):
         self.fields = tuple(list(self.fields[:idx]) + [field] + list(self.fields[idx + 1:]))
@@ -1759,17 +1838,17 @@ class Union(Field):
 class UUID(Field):
     """A resource field for UUIDs."""
 
-    errors = {
-        'invalid': '%(field)s must be a UUID'
-    }
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a UUID')
+    ]
     pattern = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
 
     def __init__(self, **params):
         super(UUID, self).__init__(**params)
 
-    def _validate_value(self, value):
+    def _validate_value(self, value, ancestry):
         if not (isinstance(value, basestring) and self.pattern.match(value)):
-            raise InvalidTypeError(value=value).construct(self, 'invalid')
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
 class Undefined(object):
     """A field which can be defined at a later time."""
@@ -1794,4 +1873,5 @@ Errors = Tuple((
     description='A two-tuple containing the errors for this request.'
 )
 
-__all__ = ['INCOMING', 'OUTGOING', 'Field', 'Errors', 'Undefined'] + construct_all_list(locals(), Field)
+__all__ = ['INCOMING', 'OUTGOING', 'Field', 'Errors', 'Error',
+    'Undefined'] + construct_all_list(locals(), Field)
