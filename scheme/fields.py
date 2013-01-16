@@ -22,6 +22,9 @@ PATTERN_TYPE = type(re.compile(''))
 INCOMING = 'incoming'
 OUTGOING = 'outgoing'
 
+class FieldExcludedError(Exception):
+    """Raised when a field is excluded during the extraction of a value."""
+
 class Error(object):
     """A field error."""
 
@@ -248,9 +251,11 @@ class Field(object):
 
         return description
 
-    def extract(self, subject):
+    def extract(self, subject, **params):
         """Attempts to extract a valid value for this field from ``subject``."""
 
+        if params and not self.screen(**params):
+            raise FieldExcludedError(self)
         if subject is not None and self.extractor:
             return self.extractor(self, subject)
         else:
@@ -328,6 +333,16 @@ class Field(object):
 
         data = Format.read(path, **params)
         return self.process(data, INCOMING, True)
+
+    def screen(self, **params):
+        """Screens this field against the specified tests."""
+
+        for attr, value in params.iteritems():
+            if value is not None:
+                if getattr(self, attr, None) != value:
+                    return False
+        else:
+            return True
 
     def serialize(self, value, format=None, **params):
         """Serializes ``value`` to ``format``, if specified, after processing it
@@ -865,7 +880,10 @@ class Map(Field):
             params['key'] = self.key.describe(parameters)
         return super(Map, self).describe(parameters, **params)
 
-    def extract(self, subject):
+    def extract(self, subject, **params):
+        if params and not self.screen(**params):
+            raise FieldExcludedError(self)
+
         definition = self.value
         if subject is None:
             return subject
@@ -874,7 +892,10 @@ class Map(Field):
 
         extraction = {}
         for key, value in subject.iteritems():
-            extraction[key] = definition.extract(value)
+            try:
+                extraction[key] = definition.extract(value, **params)
+            except FieldExcludedError:
+                pass
         return extraction
 
     def instantiate(self, value, key=None):
@@ -1027,7 +1048,10 @@ class Sequence(Field):
         return super(Sequence, self).describe(parameters, item=self.item.describe(parameters),
             default=default)
 
-    def extract(self, subject):
+    def extract(self, subject, **params):
+        if params and not self.screen(**params):
+            raise FieldExcludedError(self)
+
         definition = self.item
         if subject is None:
             return subject
@@ -1036,7 +1060,10 @@ class Sequence(Field):
 
         extraction = []
         for item in subject:
-            extraction.append(definition.extract(item))
+            try:
+                extraction.append(definition.extract(item, **params))
+            except FieldExcludedError:
+                pass
         return extraction
 
     def filter(self, exclusive=False, **params):
@@ -1227,7 +1254,10 @@ class Structure(Field):
                 polymorphic_on=None,
                 structure = self._describe_structure(self.structure, parameters))
 
-    def extract(self, subject):
+    def extract(self, subject, **params):
+        if params and not self.screen(**params):
+            raise FieldExcludedError(self)
+
         if subject is None:
             return subject
         if self.extractor:
@@ -1243,8 +1273,11 @@ class Structure(Field):
                     continue
             except KeyError:
                 continue
-            else:
-                extraction[name] = field.extract(value)
+
+            try:
+                extraction[name] = field.extract(value, **params)
+            except FieldExcludedError:
+                pass
 
         return extraction
 
@@ -1706,7 +1739,10 @@ class Tuple(Field):
 
         return super(Tuple, self).describe(parameters, values=values, default=default)
 
-    def extract(self, subject):
+    def extract(self, subject, **params):
+        if params and not self.screen(**params):
+            raise FieldExcludedError(self)
+
         if subject is None:
             return subject
         if self.extractor:
@@ -1714,7 +1750,10 @@ class Tuple(Field):
 
         extraction = []
         for i, definition in enumerate(self.values):
-            extraction.append(definition.extract(subject[i]))
+            try:
+                extraction.append(definition.extract(subject[i], **params))
+            except FieldExcludedError:
+                pass
         return tuple(extraction)
 
     def instantiate(self, value, key=None):
