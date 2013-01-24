@@ -118,6 +118,10 @@ class Field(object):
     :param extractor: Optional, default is ``None``; specifies an extraction
         callback for this field.
 
+    :param preprocessor: Optional, default is ``None``; specifies a preprocessor
+        function for this field, which will be given a value to preprocess after
+        unserialization but before validation.
+
     :param dict aspects: Optional, default is ``None``; if specified, a dictionary
         with string keys containing extension aspects for this field.
     """
