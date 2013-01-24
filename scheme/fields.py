@@ -428,12 +428,12 @@ class Binary(Field):
             raise SchemeError('max_length must be an integer >= 0, if specified')
 
     def _serialize_value(self, value):
-        return urlsafe_b64encode(value)
+        return urlsafe_b64encode(str(value))
 
     def _unserialize_value(self, value, ancestry):
         if not isinstance(value, basestring):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
-        return urlsafe_b64decode(value)
+        return urlsafe_b64decode(str(value))
 
     def _validate_value(self, value, ancestry):
         if not isinstance(value, basestring):
