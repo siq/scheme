@@ -3,6 +3,7 @@ import re
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from copy import deepcopy
 from datetime import datetime, date, time
+from decimal import Decimal as decimal
 from time import mktime, strptime
 
 from scheme.exceptions import *
@@ -626,6 +627,61 @@ class DateTime(Field):
                     'maximum', maximum=maximum.strftime(self.pattern))
 
         return value
+
+class Decimal(Field):
+    """A resource field for decimal values."""
+
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a decimal value'),
+        Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)s'),
+        Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)s'),
+    ]
+
+    def __init__(self, minimum=None, maximum=None, **params):
+        super(Decimal, self).__init__(**params)
+        if minimum is None or isinstance(minimum, decimal):
+            self.minimum = minimum
+        else:
+            raise TypeError(minimum)
+
+        if maximum is None or isinstance(maximum, decimal):
+            self.maximum = maximum
+        else:
+            raise TypeError(maximum)
+
+    def __repr__(self):
+        aspects = []
+        if self.minimum is not None:
+            aspects.append('minimum=%s' % self.minimum)
+        if self.maximum is not None:
+            aspects.append('maximum=%s' % self.maximum)
+        return super(Decimal, self).__repr__(aspects)
+
+    def _serialize_value(self, value):
+        return str(value)
+
+    def _unserialize_value(self, value, ancestry):
+        if isinstance(value, decimal):
+            return value
+
+        try:
+            return decimal(value)
+        except Exception:
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+
+    def _validate_value(self, value, ancestry):
+        if not isinstance(value, decimal):
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+
+        minimum = self.minimum
+        if minimum is not None and value < minimum:
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'minimum', minimum=minimum)
+
+        maximum = self.maximum
+        if maximum is not None and value > maximum:
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'maximum', maximum=maximum)
 
 class Definition(Field):
     """A field for field definitions."""
