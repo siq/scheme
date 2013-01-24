@@ -130,11 +130,12 @@ class Field(object):
     ]
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
         'required', 'notes', 'structural')
+    preprocessor = None
     structural = False
 
     def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
         constant=None, errors=None, notes=None, nonempty=False, instantiator=None,
-        extractor=None, aspects=None, **params):
+        extractor=None, preprocessor=None, aspects=None, **params):
 
         if nonempty:
             nonnull = required = True
@@ -159,6 +160,9 @@ class Field(object):
         self.notes = notes
         self.nonnull = nonnull
         self.required = required
+
+        if preprocessor is not None:
+            self.preprocessor = preprocessor
 
         if errors:
             self.errors = self.errors.copy()
@@ -316,6 +320,8 @@ class Field(object):
             return None
         if serialized and phase == INCOMING:
             value = self._unserialize_value(value, ancestry)
+        if self.preprocessor:
+            value = self.preprocessor(value)
         if self.constant is not None and value != self.constant:
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
 
@@ -325,6 +331,7 @@ class Field(object):
 
         if serialized and phase == OUTGOING:
             value = self._serialize_value(value)
+
         return value
 
     def read(self, path, **params):
@@ -914,6 +921,8 @@ class Map(Field):
             return None
         if not isinstance(value, dict):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+        if self.preprocessor:
+            value = self.preprocessor(value)
 
         valid = True
         key_field = self.key
@@ -942,10 +951,10 @@ class Map(Field):
                     map[name] = ValidationError(identity=ancestry, field=self).construct(
                         'required', name=name)
 
-        if valid:
-            return map
-        else:
+        if not valid:
             raise ValidationError(identity=ancestry, field=self, value=value, structure=map)
+
+        return map
 
     def _define_undefined_field(self, field):
         self.value = field
@@ -1090,6 +1099,8 @@ class Sequence(Field):
             return None
         if not isinstance(value, list):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+        if self.preprocessor:
+            value = self.preprocessor(value)
 
         min_length = self.min_length
         if min_length is not None and len(value) < min_length:
@@ -1338,6 +1349,8 @@ class Structure(Field):
             return None
         if not isinstance(value, dict):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+        if self.preprocessor:
+            value = self.preprocessor(value)
 
         valid = True
         names = set(value.keys())
@@ -1571,8 +1584,6 @@ class Text(Field):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
         if self.strip:
             value = value.strip()
-        if self.pattern and not self.pattern.match(value):
-            raise ValidationError(identity=ancestry, field=self, value=value).construct('pattern')
 
         min_length = self.min_length
         if min_length is not None and len(value) < min_length:
@@ -1589,6 +1600,9 @@ class Text(Field):
                 noun = 'characters'
             raise ValidationError(identity=ancestry, field=self, value=value).construct('max_length',
                 max_length=max_length, noun=noun)
+
+        if self.pattern and not self.pattern.match(value):
+            raise ValidationError(identity=ancestry, field=self, value=value).construct('pattern')
 
         return value
 
@@ -1774,6 +1788,8 @@ class Tuple(Field):
             return None
         if not isinstance(value, (list, tuple)):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+        if self.preprocessor:
+            value = self.preprocessor(value)
 
         values = self.values
         if len(value) != len(values):
@@ -1855,7 +1871,6 @@ class Union(Field):
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         if not ancestry:
             ancestry = [self.guaranteed_name]
-
         if self._is_null(value, ancestry):
             return None
 
