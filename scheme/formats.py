@@ -428,4 +428,10 @@ class Csv(Format):
         writer.writerows(value)
         return content.getvalue()
 
+def serialize(mimetype, value, **params):
+    return Format.formats[mimetype].serialize(value, **params)
+
+def unserialize(mimetype, value, **params):
+    return Format.formats[mimetype].unserialize(value, **params)
+
 __all__ = ['Format'] + construct_all_list(locals(), Format)
