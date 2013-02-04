@@ -28,6 +28,12 @@ class TestEmail(FieldTestCase):
         self.assert_not_processed(field, 'nonnull', None)
         self.assert_not_processed(field, 'min_length', '')
 
+    def test_extended_processing(self):
+        field = Email(extended=True)
+        self.assert_processed(field, None, '', 'alpha@test.com', 'Alpha <alpha@test.com>',
+            '"Alpha" <alpha@test.com>', '"Alpha < Beta" <alpha@test.com>')
+        self.assert_not_processed(field, 'pattern', 'not an email', 'Alpha < Beta <alpha@test.com>')
+
 class TestObjectReference(FieldTestCase):
     def _test_processing(self):
         field = ObjectReference()

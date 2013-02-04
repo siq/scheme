@@ -9,9 +9,11 @@ from scheme.util import construct_all_list, identify_object, import_object
 EMAIL_EXPR = (
     r"([-!#$%&'*+/=?^_`{}|~0-9a-zA-Z]+(\.[-!#$%&'*+/=?^_`{}|~0-9a-zA-Z]+)*"
     r'|"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"'
-    r')@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,6}')
-EMAIL_ADDRESS_EXPR = re.compile(r'^(?:%s)?$' % EMAIL_EXPR)
-EMAIL_LIST_EXPR = re.compile(r'^(?:%s(?:,%s)*)?$' % (EMAIL_EXPR, EMAIL_EXPR))
+    r')@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,6}')
+EMAIL_ADDRESS_EXPR = re.compile(r'^(%s)?$' % EMAIL_EXPR)
+EXTENDED_EMAIL_ADDRESS_EXPR = re.compile(r'^(("[^"]+"[ ]+<%s>)|([^<]+[ ]+<%s>)|(%s))?$'
+    % (EMAIL_EXPR, EMAIL_EXPR, EMAIL_EXPR))
+EMAIL_LIST_EXPR = re.compile(r'^(%s(,%s)*)?$' % (EMAIL_EXPR, EMAIL_EXPR))
 
 SEPARATOR_EXPR = re.compile(r'[\s,;:]+')
 SEPARATORS = whitespace + ',;:'
@@ -20,22 +22,37 @@ class Email(Text):
     """A field for one or more email addresses, separated by whitespace, commas, semicolons
     or colons."""
 
-    single_error = Error('pattern', 'invalid value', '%(field)s must be a valid email address')
-    multiple_error = Error('pattern', 'invalid value', '%(field)s must be a list of valid email addresses')
+    single_errors = [Error('pattern', 'invalid value', '%(field)s must be a valid email address')]
+    multiple_errors = [Error('pattern', 'invalid value', '%(field)s must be a list of valid email addresses')]
     parameters = ('multiple',)
 
-    def __init__(self, multiple=False, pattern=None, strip=None, **params):
-        self.multiple = multiple
+    def __init__(self, multiple=False, extended=False, pattern=None, strip=None, **params):
         if multiple:
-            super(Email, self).__init__(errors=[self.multiple_error], strip=False,
-                pattern=EMAIL_LIST_EXPR, **params)
+            errors = self.multiple_errors
+            if not extended:
+                pattern = EMAIL_LIST_EXPR
+            else:
+                raise TypeError('field does not support multiple=True and extended=True')
         else:
-            super(Email, self).__init__(errors=[self.single_error], strip=False,
-                pattern=EMAIL_ADDRESS_EXPR, **params)
+            errors = self.single_errors
+            if not extended:
+                pattern = EMAIL_ADDRESS_EXPR
+            else:
+                pattern = EXTENDED_EMAIL_ADDRESS_EXPR
 
-    @staticmethod
-    def preprocessor(value):
-        return SEPARATOR_EXPR.sub(',', value.strip(SEPARATORS)).lower()
+        self.extended = extended
+        self.multiple = multiple
+        super(Email, self).__init__(errors=errors, strip=False, pattern=pattern, **params)
+
+    def preprocessor(self, value):
+        if self.extended:
+            return value
+        
+        value = value.strip(SEPARATORS).lower()
+        if self.multiple:
+            value = SEPARATOR_EXPR.sub(',', value)
+
+        return value.lower()
 
 class ObjectReference(Field):
     """A resource field for references to python objects."""
