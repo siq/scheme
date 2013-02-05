@@ -1380,6 +1380,9 @@ class Structure(Field):
                 default[name] = field.default
         return default
 
+    def get(self, key, default=None):
+        return self.structure.get(key, default)
+
     def insert(self, field, overwrite=False):
         if not isinstance(field, Field):
             raise TypeError(field)
