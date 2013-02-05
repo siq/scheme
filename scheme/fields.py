@@ -956,6 +956,8 @@ class Map(Field):
             return subject
         if self.extractor:
             subject = self.extractor(self, subject)
+        if not isinstance(subject, dict):
+            raise ValueError(subject)
 
         extraction = {}
         for key, value in subject.iteritems():
@@ -1126,6 +1128,8 @@ class Sequence(Field):
             return subject
         if self.extractor:
             subject = self.extractor(self, subject)
+        if not isinstance(subject, (list, tuple)):
+            raise ValueError(subject)
 
         extraction = []
         for item in subject:
@@ -1333,10 +1337,12 @@ class Structure(Field):
             return subject
         if self.extractor:
             subject = self.extractor(self, subject)
+        if not isinstance(subject, dict):
+            raise ValueError(subject)
 
         definition = self._get_definition(subject)
-
         extraction = {}
+
         for name, field in definition.iteritems():
             try:
                 value = subject[name]
@@ -1821,6 +1827,8 @@ class Tuple(Field):
             return subject
         if self.extractor:
             subject = self.extractor(self, subject)
+        if not isinstance(subject, (list, tuple)):
+            raise ValueError(subject)
 
         extraction = []
         for i, definition in enumerate(self.values):
