@@ -59,6 +59,8 @@ class Format(object):
 
     @classmethod
     def read(cls, path, quiet=False, **params):
+        if not path:
+            raise ValueError(path)
         if not os.path.exists(path):
             if quiet:
                 return False
