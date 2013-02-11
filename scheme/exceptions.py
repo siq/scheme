@@ -13,7 +13,7 @@ class StructuralError(SchemeError):
     def __init__(self, *errors, **params):
         self.errors = list(errors)
         self.field = params.pop('field', None)
-        self.identity = params.pop('identity', None)
+        self.identity = params.pop('identity', '(unknown)')
         self.structure = params.pop('structure', None)
         self.tracebacks = None
         self.value = params.pop('value', None)
