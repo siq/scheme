@@ -95,6 +95,10 @@ class Field(object):
         this field must have a value other than ``None`` when present in a
         request to the associated resource.
 
+    :param boolean ignore_null: Optional, default is ``False``; if ``True``, indicates
+        a null value for this field will be treated as if a value wasn't specified
+        when processing a ``Structure`` value.
+
     :param boolean required: Optional, default is ``False``; if ``True``, indicates
         this field is required to be present in a request to the associated
         resource. Only applicable when this field is part of a ``Structure``.
@@ -134,13 +138,14 @@ class Field(object):
         Error('nonnull', 'null value', '%(field)s must be a non-null value'),
     ]
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
-        'required', 'notes', 'structural')
+        'ignore_null', 'required', 'notes', 'structural')
     preprocessor = None
     structural = False
 
-    def __init__(self, name=None, description=None, default=None, nonnull=False, required=False,
-        constant=None, errors=None, notes=None, nonempty=False, instantiator=None,
-        extractor=None, preprocessor=None, aspects=None, **params):
+    def __init__(self, name=None, description=None, default=None, nonnull=False,
+        ignore_null=False, required=False, constant=None, errors=None, notes=None,
+        nonempty=False, instantiator=None, extractor=None, preprocessor=None,
+        aspects=None, **params):
 
         if nonempty:
             nonnull = required = True
@@ -160,6 +165,7 @@ class Field(object):
         self.default = default
         self.description = description
         self.extractor = extractor
+        self.ignore_null = ignore_null
         self.instantiator = instantiator
         self.name = name
         self.notes = notes
@@ -1469,6 +1475,9 @@ class Structure(Field):
                     'required', name=name)
                 continue
             else:
+                continue
+
+            if field.ignore_null and field_value is None:
                 continue
 
             try:

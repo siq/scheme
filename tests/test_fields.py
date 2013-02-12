@@ -597,6 +597,13 @@ class TestStructure(FieldTestCase):
         expected_error = ValidationError(structure={'a': REQUIRED_ERROR, 'b': 'b'})
         self.assert_not_processed(field, expected_error, {'b': 'b'})
 
+    def test_ignore_null_values(self):
+        field = Structure({'a': Integer()})
+        self.assertEqual(field.process({'a': None}, INCOMING), {'a': None})
+
+        field = Structure({'a': Integer(ignore_null=True)})
+        self.assertEqual(field.process({'a': None}, INCOMING), {})
+
     def test_unknown_values(self):
         field = Structure({'a': Integer()})
         self.assert_processed(field, {}, {'a': 1})
