@@ -1291,6 +1291,10 @@ class Structure(Field):
         else:
             return False
 
+    @property
+    def polymorphic(self):
+        return (self.polymorphic_on is not None)
+
     @classmethod
     def construct(cls, specification):
         structure = specification['structure']
@@ -1381,13 +1385,13 @@ class Structure(Field):
         return self.clone(structure=structure)
 
     def generate_default(self, sparse=True):
-        # todo: support for polymorphic_on
-
-        default = {}
-        for name, field in self.structure.iteritems():
-            if not sparse or field.default is not None:
-                default[name] = field.default
-        return default
+        if self.polymorphic:
+            default = {}
+            for identity, structure in self.structure.iteritems():
+                default[identity] = self._generate_default_values(structure, sparse)
+            return default
+        else:
+            return self._generate_default_values(self.structure, sparse)
 
     def get(self, key, default=None):
         return self.structure.get(key, default)
@@ -1530,6 +1534,13 @@ class Structure(Field):
             if field:
                 filtered[name] = field
         return filtered
+
+    def _generate_default_values(self, structure, sparse=False):
+        default = {}
+        for name, field in structure.iteritems():
+            if not sparse or field.default is not None:
+                default[name] = field.default
+        return default
 
     def _get_definition(self, value):
         identity = self._get_polymorphic_identity(value)
@@ -1912,10 +1923,10 @@ class Union(Field):
     fields = None
     structural = True
 
-    def __init__(self, fields=None, **params):
+    def __init__(self, *fields, **params):
         super(Union, self).__init__(**params)
-        if fields is not None:
-            self.fields = fields
+        if fields:
+            self.fields = tuple(fields)
         if not isinstance(self.fields, tuple) or not self.fields:
             raise SchemeError('Union.fields must be a tuple with at least one item')
 

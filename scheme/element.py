@@ -6,9 +6,13 @@ class ElementMeta(type):
         if element.schema is None:
             return element
 
+        element.__polymorphic_on__ = None
         schema = element.schema
+
         if isinstance(schema, Structure):
             element.__attrs__ = schema.generate_default(sparse=False)
+            if schema.polymorphic:
+                element.__polymorphic_on__ = schema.polymorphic_on.name
         elif schema.name:
             element.__attrs__ = {schema.name: schema.default}
         else:
@@ -25,7 +29,13 @@ class Element(object):
     schema = None
 
     def __init__(self, **params):
-        for attr, default in self.__attrs__.iteritems():
+        polymorphic_on = self.__polymorphic_on__
+        if polymorphic_on:
+            defaults = self.__attrs__[params[polymorphic_on]]
+        else:
+            defaults = self.__attrs__
+
+        for attr, default in defaults.iteritems():
             setattr(self, attr, params.get(attr, default))
 
     def __repr__(self):
@@ -54,5 +64,5 @@ class Element(object):
         return self.schema.serialize(self.schema.extract(self), format)
 
     @classmethod
-    def unserialize(self, value, format='yaml'):
+    def unserialize(cls, value, format='yaml'):
         return cls.schema.instantiate(cls.schema.unserialize(value, format))
