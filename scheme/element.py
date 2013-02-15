@@ -26,6 +26,7 @@ class Element(object):
     """A schema-based object."""
 
     __metaclass__ = ElementMeta
+    key_attr = None
     schema = None
 
     def __init__(self, **params):
@@ -56,9 +57,12 @@ class Element(object):
     @classmethod
     def instantiate(cls, field, value, key=None):
         if isinstance(field, Structure):
-            return cls(**value)
+            instance = cls(**value)
         else:
-            return cls(**{field.name: value})
+            instance = cls(**{field.name: value})
+        if key is not None and cls.key_attr:
+            setattr(instance, cls.key_attr, key)
+        return instance
 
     def serialize(self, format='yaml'):
         return self.schema.serialize(self.schema.extract(self), format)

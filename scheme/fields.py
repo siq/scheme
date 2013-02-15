@@ -310,6 +310,12 @@ class Field(object):
         else:
             return value
 
+    def interpolate(self, subject, parameters):
+        if subject is not None and subject in parameters:
+            return parameters[subject]
+        else:
+            return subject
+
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         """Processes ``value`` for this field.
 
@@ -980,6 +986,18 @@ class Map(Field):
         instantiate = self.value.instantiate
         value = dict((k, instantiate(v, k)) for k, v in value.iteritems())
         return super(Map, self).instantiate(value, key)
+
+    def interpolate(self, subject, parameters):
+        definition = self.value
+        if subject is None:
+            return subject
+        if not isinstance(subject, dict):
+            raise ValueError(subject)
+
+        interpolation = {}
+        for key, value in subject.iteritems():
+            interpolation[key] = definition.interpolate(value, parameters)
+        return interpolation
         
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         if not ancestry:
@@ -1160,6 +1178,18 @@ class Sequence(Field):
         instantiate = self.item.instantiate
         value = [instantiate(v) for v in value]
         return super(Sequence, self).instantiate(value, key)
+
+    def interpolate(self, subject, parameters):
+        definition = self.item
+        if subject is None:
+            return None
+        if not isinstance(subject, (list, tuple)):
+            raise ValueError(subject)
+
+        interpolation = []
+        for item in subject:
+            interpolation.append(definition.interpolate(item, parameters))
+        return interpolation
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         if not ancestry:
@@ -1412,6 +1442,24 @@ class Structure(Field):
         definition = self._get_definition(value)
         value = dict((k, definition[k].instantiate(v)) for k, v in value.iteritems())
         return super(Structure, self).instantiate(value, key)
+
+    def interpolate(self, subject, parameters):
+        if subject is None:
+            return subject
+        if not isinstance(subject, dict):
+            raise ValueError(subject)
+
+        definition = self._get_definition(subject)
+        interpolation = {}
+
+        for name, field in definition.iteritems():
+            try:
+                value = subject[name]
+            except KeyError:
+                continue
+            else:
+                interpolation[name] = field.interpolate(value, parameters)
+        return interpolation
 
     def merge(self, structure, prefer=False):
         for name, field in structure.iteritems():
@@ -1874,6 +1922,17 @@ class Tuple(Field):
 
         return super(Tuple, self).instantiate(tuple(sequence), key)
 
+    def interpolate(self, subject, parameters):
+        if subject is None:
+            return subject
+        if not isinstance(subject, (list, tuple)):
+            raise ValueError(subject)
+
+        interpolation = []
+        for i, definition in enumerate(self.values):
+            interpolation = definition.interpolate(subject[i], parameters)
+        return interpolation
+
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         if not ancestry:
             ancestry = [self.guaranteed_name]
@@ -1960,6 +2019,9 @@ class Union(Field):
         return super(Union, self).describe(parameters, fields=fields)
 
     def instantiate(self, value):
+        raise NotImplementedError()
+
+    def interpolate(self, subject, parameters):
         raise NotImplementedError()
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
