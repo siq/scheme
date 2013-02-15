@@ -1246,6 +1246,9 @@ class Structure(Field):
             key_order=None, **params):
         
         if polymorphic_on:
+            if isinstance(polymorphic_on, basestring):
+                polymorphic_on = Enumeration((structure or self.structure).keys(),
+                    name=polymorphic_on, nonempty=True)
             if not isinstance(polymorphic_on, Field):
                 raise SchemeError()
             if not polymorphic_on.required:

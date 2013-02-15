@@ -89,7 +89,7 @@ class FieldTestCase(TestCase):
         if not isinstance(received, type(expected)):
             return False, 'received error not same type as expected error'
         if not self.compare_errors(expected, received):
-            return False, 'notstructural errors do not match'
+            return False, 'nonstructural errors do not match'
         if not self.compare_structure(expected, received):
             return False, 'structural errors do not match'
         return True, ''
@@ -633,6 +633,22 @@ class TestStructure(FieldTestCase):
             'alpha': {'a': Integer()},
             'beta': {'b': Integer()},
         }, polymorphic_on=Text(name='identity'))
+
+        self.assert_processed(field, None)
+        self.assert_not_processed(field, 'required', {})
+
+        self.assert_processed(field, {'identity': 'alpha', 'a': 1},
+            {'identity': 'beta', 'b': 2})
+        self.assert_not_processed(field, 'unrecognized', {'identity': 'gamma'})
+
+        expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
+        self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
+
+    def test_polymorphic_on_autogeneration(self):
+        field = Structure({
+            'alpha': {'a': Integer()},
+            'beta': {'b': Integer()},
+        }, polymorphic_on='identity')
 
         self.assert_processed(field, None)
         self.assert_not_processed(field, 'required', {})
