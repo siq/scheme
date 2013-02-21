@@ -3,6 +3,14 @@ from scheme.fields import *
 class ElementMeta(type):
     def __new__(metatype, name, bases, namespace):
         element = type.__new__(metatype, name, bases, namespace)
+        if element.polymorphic_identity:
+            base = bases[0]
+            if base.__polymorphic_on__:
+                base.__polymorphic_impl__[element.polymorphic_identity] = element
+            else:
+                raise TypeError()
+            return element
+
         if element.schema is None:
             return element
 
@@ -13,6 +21,7 @@ class ElementMeta(type):
             element.__attrs__ = schema.generate_default(sparse=False)
             if schema.polymorphic:
                 element.__polymorphic_on__ = schema.polymorphic_on.name
+                element.__polymorphic_impl__ = {}
         elif schema.name:
             element.__attrs__ = {schema.name: schema.default}
         else:
@@ -27,6 +36,7 @@ class Element(object):
 
     __metaclass__ = ElementMeta
     key_attr = None
+    polymorphic_identity = None
     schema = None
 
     def __init__(self, **params):
@@ -56,10 +66,19 @@ class Element(object):
 
     @classmethod
     def instantiate(cls, field, value, key=None):
+        instance = None
         if isinstance(field, Structure):
-            instance = cls(**value)
+            polymorphic_on = cls.__polymorphic_on__
+            if polymorphic_on:
+                identity = value[polymorphic_on]
+                if identity in cls.__polymorphic_impl__:
+                    impl = cls.__polymorphic_impl__[identity]
+                    instance = impl(**value)
+            if instance is None:
+                instance = cls(**value)
         else:
             instance = cls(**{field.name: value})
+
         if key is not None and cls.key_attr:
             setattr(instance, cls.key_attr, key)
         return instance
