@@ -23,6 +23,9 @@ PATTERN_TYPE = type(re.compile(''))
 INCOMING = 'incoming'
 OUTGOING = 'outgoing'
 
+class CannotDescribeError(Exception):
+    """Raised when a parameter to a field cannot be described for serialization."""
+
 class FieldExcludedError(Exception):
     """Raised when a field is excluded during the extraction of a value."""
 
@@ -240,6 +243,8 @@ class Field(object):
         """Constructs an instance of this field using ``specification``, which should be a
         dictionary of field parameters."""
 
+        print 'HERE'
+
         return cls(**specification)
 
     def describe(self, parameters=None, **params):
@@ -249,20 +254,30 @@ class Field(object):
 
         description = {'__type__': self.type}
         for attr, value in self.aspects.iteritems():
-            if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
-                description[attr] = value
-        
+            if value is not None:
+                try:
+                    description[attr] = self._describe_parameter(value)
+                except CannotDescribeError:
+                    pass
+
         for source in (self.parameters, parameters):
-            if source:
-                for parameter in source:
-                    if parameter not in params:
-                        value = getattr(self, parameter, None)
-                        if value is not None and isinstance(value, NATIVELY_SERIALIZABLE):
-                            description[parameter] = value
+            if not source:
+                continue
+            for parameter in source:
+                if parameter not in params:
+                    value = getattr(self, parameter, None)
+                    if value is not None:
+                        try:
+                            description[parameter] = self._describe_parameter(value)
+                        except CannotDescribeError:
+                            pass
 
         for name, value in params.iteritems():
             if value is not None:
-                description[name] = value
+                try:
+                    description[name] = self._describe_parameter(value)
+                except CannotDescribeError:
+                    pass
 
         return description
 
@@ -392,6 +407,22 @@ class Field(object):
     def write(self, path, value, format=None, **params):
         value = self.process(value, OUTGOING, True)
         Format.write(path, value, format, **params)
+
+    def _describe_parameter(self, parameter):
+        if isinstance(parameter, dict):
+            return dict((k, self._describe_parameter(v)) for k, v in parameter.iteritems())
+        elif isinstance(parameter, (list, tuple)):
+            description = [self._describe_parameter(item) for item in parameter]
+            if isinstance(parameter, list):
+                return description
+            else:
+                return tuple(description)
+        elif isinstance(parameter, Field):
+            return parameter.describe()
+        elif isinstance(parameter, NATIVELY_SERIALIZABLE):
+            return parameter
+        else:
+            raise CannotDescribeError(parameter)
 
     def _is_null(self, value, ancestry):
         if value is None:
