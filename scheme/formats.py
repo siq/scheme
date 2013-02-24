@@ -146,6 +146,8 @@ class StructuredText(Format):
             return '[%s]' % ','.join(tokens)
         elif isinstance(content, bool):
             return content and 'true' or 'false'
+        elif content is None:
+            return 'null'
         else:
             return str(content)
 
@@ -208,6 +210,8 @@ class StructuredText(Format):
             return True
         elif candidate == 'false':
             return False
+        elif candidate == 'null':
+            return None
         elif not parse_numbers:
             return value
 
