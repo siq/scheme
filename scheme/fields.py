@@ -79,7 +79,8 @@ class FieldMeta(type):
         if isinstance(specification, Field):
             return specification
         if specification is not None:
-            return field.types[specification['__type__']].construct(specification)
+            constructor = field.types[specification.pop('__type__')]
+            return constructor.construct(specification)
 
 class Field(object):
     """A resource field.
@@ -243,9 +244,8 @@ class Field(object):
         """Constructs an instance of this field using ``specification``, which should be a
         dictionary of field parameters."""
 
-        print 'HERE'
-
-        return cls(**specification)
+        parameters = cls._construct_parameter(specification)
+        return cls(**parameters)
 
     def describe(self, parameters=None, **params):
         """Constructs a serializable description of this field as a dictionary, which will
@@ -407,6 +407,22 @@ class Field(object):
     def write(self, path, value, format=None, **params):
         value = self.process(value, OUTGOING, True)
         Format.write(path, value, format, **params)
+
+    @classmethod
+    def _construct_parameter(cls, parameter):
+        if isinstance(parameter, dict):
+            if '__type__' in parameter:
+                return Field.reconstruct(parameter)
+            else:
+                return dict((k, cls._construct_parameter(v)) for k, v in parameter.iteritems())
+        elif isinstance(parameter, (list, tuple)):
+            description = [cls._construct_parameter(item) for item in parameter]
+            if isinstance(parameter, list):
+                return description
+            else:
+                return tuple(description)
+        else:
+            return parameter
 
     def _describe_parameter(self, parameter):
         if isinstance(parameter, dict):
@@ -968,13 +984,6 @@ class Map(Field):
         if self.required_keys is not None and not isinstance(self.required_keys, (list, tuple)):
             raise SchemeError('Map(required_keys) must be a list of strings')
 
-    @classmethod
-    def construct(cls, specification):
-        specification['value'] = Field.reconstruct(specification['value'])
-        if 'key' in specification:
-            specification['key'] = Field.reconstruct(specification['key'])
-        return super(Map, cls).construct(specification)
-
     def describe(self, parameters=None):
         if not isinstance(self.value, Field):
             return SchemeError()
@@ -1157,11 +1166,6 @@ class Sequence(Field):
             self.max_length = max_length
         else:
             raise SchemeError('Sequence.max_length must be an integer if specified')
-
-    @classmethod
-    def construct(cls, specification):
-        specification['item'] = Field.reconstruct(specification['item'])
-        return super(Sequence, cls).construct(specification)
 
     def describe(self, parameters=None):
         if not isinstance(self.item, Field):
@@ -1355,19 +1359,6 @@ class Structure(Field):
     @property
     def polymorphic(self):
         return (self.polymorphic_on is not None)
-
-    @classmethod
-    def construct(cls, specification):
-        structure = specification['structure']
-        if specification.get('polymorphic_on', False):
-            specification['polymorphic_on'] = Field.reconstruct(specification['polymorphic_on'])
-            for candidate in structure.itervalues():
-                for name, field in candidate.items():
-                    candidate[name] = Field.reconstruct(field)
-        else:
-            for name, field in structure.items():
-                structure[name] = Field.reconstruct(field)
-        return super(Structure, cls).construct(specification)
 
     def describe(self, parameters=None):
         polymorphic_on = self.polymorphic_on
@@ -1902,11 +1893,6 @@ class Tuple(Field):
 
         self.values = tuple(stack)
 
-    @classmethod
-    def construct(cls, specification):
-        specification['values'] = tuple(Field.reconstruct(field) for field in specification['values'])
-        return super(Tuple, cls).construct(specification)
-
     def describe(self, parameters=None):
         values = []
         for value in self.values:
@@ -2034,11 +2020,6 @@ class Union(Field):
                 raise SchemeError('Union.fields items must be Field instances')
 
         self.fields = tuple(stack)
-
-    @classmethod
-    def construct(cls, specification):
-        specification['fields'] = tuple(Field.reconstruct(field) for field in specification['fields'])
-        return super(Union, cls).construct(specification)
 
     def describe(self, parameters=None):
         fields = []
