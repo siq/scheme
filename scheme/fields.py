@@ -8,6 +8,7 @@ from time import mktime, strptime
 
 from scheme.exceptions import *
 from scheme.formats import Format
+from scheme.interpolation import interpolate_parameters
 from scheme.timezone import LOCAL, UTC
 from scheme.util import (construct_all_list, format_structure, identify_object,
     import_object, minimize_string, pluralize)
@@ -141,6 +142,7 @@ class Field(object):
         Error('invalid', 'invalid value', '%(field)s is an invalid value'),
         Error('nonnull', 'null value', '%(field)s must be a non-null value'),
     ]
+    equivalent = None
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
         'ignore_null', 'required', 'notes', 'structural')
     preprocessor = None
@@ -325,11 +327,12 @@ class Field(object):
         else:
             return value
 
-    def interpolate(self, subject, parameters):
-        if subject is not None and subject in parameters:
-            return parameters[subject]
-        else:
+    def interpolate(self, subject, parameters, interpolator=None):
+        equivalent = self.equivalent
+        if subject is None or (equivalent and isinstance(subject, equivalent)):
             return subject
+        else:
+            return interpolate_parameters(subject, parameters, interpolator, True)
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         """Processes ``value`` for this field.
@@ -522,6 +525,7 @@ class Binary(Field):
 class Boolean(Field):
     """A resource field for ``boolean`` values."""
 
+    equivalent = bool
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a boolean value'),
     ]
@@ -539,6 +543,8 @@ class Date(Field):
         either a ``date`` or a callable which returns a ``date``.
     """
 
+
+    equivalent = date
     parameters = ('maximum', 'minimum')
     pattern = '%Y-%m-%d'
 
@@ -615,6 +621,7 @@ class DateTime(Field):
     be converted back to the default timezone (typically local).
     """
 
+    equivalent = datetime
     parameters = ('maximum', 'minimum', 'utc')
     pattern = '%Y-%m-%dT%H:%M:%SZ'
 
@@ -694,6 +701,7 @@ class DateTime(Field):
 class Decimal(Field):
     """A resource field for decimal values."""
 
+    equivalent = decimal
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a decimal value'),
         Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)s'),
@@ -749,6 +757,7 @@ class Decimal(Field):
 class Definition(Field):
     """A field for field definitions."""
 
+    equivalent = Field
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a field definition'),
         Error('invalidfield', 'invalid field', '%(field)s must be one of %(fields)s'),
@@ -809,6 +818,16 @@ class Enumeration(Field):
         self.enumeration = enumeration
         self.representation = ', '.join([repr(value) for value in enumeration])
 
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None or subject in self.enumeration:
+            return subject
+
+        value = interpolate_parameters(subject, parameters, interpolator, True)
+        if value in self.enumeration:
+            return value
+        else:
+            raise ValueError(subject)
+
     def __repr__(self):
         return super(Enumeration, self).__repr__(['enumeration=[%s]' % self.representation])
 
@@ -853,6 +872,14 @@ class Float(Field):
         if self.maximum is not None:
             aspects.append('maximum=%r' % self.maximum)
         return super(Float, self).__repr__(aspects)
+
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None:
+            return None
+        elif isinstance(subject, (float, int, long)):
+            return float(subject)
+        else:
+            return float(interpolate_parameters(subject, parameters, interpolator, True))
 
     def _unserialize_value(self, value, ancestry):
         if isinstance(value, float):
@@ -913,6 +940,14 @@ class Integer(Field):
         if self.maximum is not None:
             aspects.append('maximum=%r' % self.maximum)
         return super(Integer, self).__repr__(aspects)
+
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None:
+            return None
+        elif isinstance(subject, (float, int, long)):
+            return int(subject)
+        else:
+            return int(interpolate_parameters(subject, parameters, interpolator, True))
 
     def _unserialize_value(self, value, ancestry):
         if value is True or value is False:
@@ -1027,16 +1062,19 @@ class Map(Field):
         value = dict((k, instantiate(v, k)) for k, v in value.iteritems())
         return super(Map, self).instantiate(value, key)
 
-    def interpolate(self, subject, parameters):
-        definition = self.value
+    def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return subject
+        if isinstance(subject, basestring):
+            subject = interpolate_parameters(subject, parameters, interpolator, True)
         if not isinstance(subject, dict):
             raise ValueError(subject)
 
+        definition = self.value
         interpolation = {}
+
         for key, value in subject.iteritems():
-            interpolation[key] = definition.interpolate(value, parameters)
+            interpolation[key] = definition.interpolate(value, parameters, interpolator)
         return interpolation
         
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
@@ -1214,16 +1252,19 @@ class Sequence(Field):
         value = [instantiate(v) for v in value]
         return super(Sequence, self).instantiate(value, key)
 
-    def interpolate(self, subject, parameters):
-        definition = self.item
+    def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return None
+        if isinstance(subject, basestring):
+            subject = interpolate_parameters(subject, parameters, interpolator, True)
         if not isinstance(subject, (list, tuple)):
             raise ValueError(subject)
 
+        definition = self.item
         interpolation = []
+
         for item in subject:
-            interpolation.append(definition.interpolate(item, parameters))
+            interpolation.append(definition.interpolate(item, parameters, interpolator))
         return interpolation
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
@@ -1465,9 +1506,11 @@ class Structure(Field):
         value = dict((k, definition[k].instantiate(v)) for k, v in value.iteritems())
         return super(Structure, self).instantiate(value, key)
 
-    def interpolate(self, subject, parameters):
+    def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return subject
+        if isinstance(subject, basestring):
+            subject = interpolate_parameters(subject, parameters, interpolator, True)
         if not isinstance(subject, dict):
             raise ValueError(subject)
 
@@ -1480,7 +1523,7 @@ class Structure(Field):
             except KeyError:
                 continue
             else:
-                interpolation[name] = field.interpolate(value, parameters)
+                interpolation[name] = field.interpolate(value, parameters, interpolator)
         return interpolation
 
     def merge(self, structure, prefer=False):
@@ -1741,6 +1784,12 @@ class Text(Field):
             pattern = None
         return super(Text, self).describe(parameters, pattern=pattern)
 
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None:
+            return subject
+        else:
+            return interpolate_parameters(subject, parameters, interpolator)
+
     def _validate_value(self, value, ancestry):
         if not isinstance(value, basestring):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
@@ -1778,6 +1827,7 @@ class Time(Field):
         either a ``time`` or a callable which returns a ``time``.
     """
 
+    equivalent = time
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a time value'),
         Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
@@ -1849,6 +1899,12 @@ class Token(Field):
     def __init__(self, segments=None, **params):
         super(Token, self).__init__(**params)
         self.segments = segments
+
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None:
+            return subject
+        else:
+            return interpolate_parameters(subject, parameters, interpolator)
 
     def _validate_value(self, value, ancestry):
         if not (isinstance(value, basestring) and self.pattern.match(value)):
@@ -1939,16 +1995,18 @@ class Tuple(Field):
 
         return super(Tuple, self).instantiate(tuple(sequence), key)
 
-    def interpolate(self, subject, parameters):
+    def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return subject
+        if isinstance(subject, basestring):
+            subject = interpolate_parameters(subject, parameters, interpolator, True)
         if not isinstance(subject, (list, tuple)):
             raise ValueError(subject)
 
         interpolation = []
         for i, definition in enumerate(self.values):
-            interpolation = definition.interpolate(subject[i], parameters)
-        return interpolation
+            interpolation.append(definition.interpolate(subject[i], parameters, interpolator))
+        return tuple(interpolation)
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
         if not ancestry:
@@ -2033,7 +2091,7 @@ class Union(Field):
     def instantiate(self, value):
         raise NotImplementedError()
 
-    def interpolate(self, subject, parameters):
+    def interpolate(self, subject, parameters, interpolator=None):
         raise NotImplementedError()
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
@@ -2067,6 +2125,12 @@ class UUID(Field):
 
     def __init__(self, **params):
         super(UUID, self).__init__(**params)
+
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None:
+            return subject
+        else:
+            return interpolate_parameters(subject, parameters, interpolator, True)
 
     def _validate_value(self, value, ancestry):
         if not (isinstance(value, basestring) and self.pattern.match(value)):

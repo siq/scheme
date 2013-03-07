@@ -85,6 +85,14 @@ class FieldTestCase(TestCase):
                 failed, reason = self.compare_structural_errors(expected, error)
                 assert failed, reason
 
+    def assert_interpolated(self, field, *tests, **params):
+        for test in tests:
+            if isinstance(test, tuple):
+                left, right = test
+            else:
+                left, right = test, test
+            self.assertEqual(field.interpolate(left, params), right)
+
     def compare_structural_errors(self, expected, received):
         if not isinstance(received, type(expected)):
             return False, 'received error not same type as expected error'
@@ -189,6 +197,10 @@ class TestField(FieldTestCase):
         field = Field()
         self.assertEqual(field.instantiate(1), 1)
 
+    def test_interpolation(self):
+        field = Field()
+        self.assertEqual(field.interpolate(None, {}), None)
+
 class TestBinary(FieldTestCase):
     def test_processing(self):
         field = Binary()
@@ -208,6 +220,12 @@ class TestBinary(FieldTestCase):
         self.assert_not_processed(field, 'max_length', ('\x00\x00', 'AAA='),
             ('\x00\x00\x00', 'AAAA'))
 
+    def test_interpolation(self):
+        field = Binary()
+        self.assertEqual(field.interpolate(None, {}), None)
+        self.assertEqual(field.interpolate('\x00\x01', {}), '\x00\x01')
+        self.assertEqual(field.interpolate('${value}', {'value': '\x00\x01'}), '\x00\x01')
+
 class TestBoolean(FieldTestCase):
     def test_processing(self):
         field = Boolean()
@@ -218,6 +236,11 @@ class TestBoolean(FieldTestCase):
         field = Boolean(constant=True)
         self.assert_processed(field, True)
         self.assert_not_processed(field, 'invalid', False, '')
+
+    def test_interpolation(self):
+        field = Boolean()
+        self.assert_interpolated(field, None, True, False)
+        self.assert_interpolated(field, ('${value}', True), value=True)
 
 class TestDate(FieldTestCase):
     def test_processing(self):
@@ -236,6 +259,13 @@ class TestDate(FieldTestCase):
         for field in (Date(maximum=today), Date(maximum=date.today)):
             self.assert_processed(field, (today, today_text), construct_today(-1))
             self.assert_not_processed(field, 'maximum', construct_today(+1))
+
+    def test_interpolation(self):
+        field = Date()
+        today = date.today()
+
+        self.assert_interpolated(field, None, today)
+        self.assert_interpolated(field, ('${value}', today), value=today)
 
 class TestDateTime(FieldTestCase):
     def test_processing(self):
@@ -265,11 +295,25 @@ class TestDateTime(FieldTestCase):
             self.assert_processed(field, (now, now_text), construct_now(-1))
             self.assert_not_processed(field, 'maximum', construct_now(+1))
 
+    def test_interpolation(self):
+        field = DateTime()
+        now = datetime.now()
+
+        self.assert_interpolated(field, None, now)
+        self.assert_interpolated(field, ('${value}', now), value=now)
+
 class TestDefinition(FieldTestCase):
     def test_processing(self):
         field = Definition()
         self.assert_not_processed(field, 'invalid', True)
         self.assert_processed(field, None)
+
+    def test_interpolation(self):
+        field = Definition()
+        value = Field()
+
+        self.assert_interpolated(field, None, value)
+        self.assert_interpolated(field, ('${value}', value), value=value)
 
 class TestEnumeration(FieldTestCase):
     def test_specification(self):
@@ -282,6 +326,11 @@ class TestEnumeration(FieldTestCase):
 
         self.assert_processed(field, None, *values)
         self.assert_not_processed(field, 'invalid', 'beta', 2, False)
+
+    def test_interpolation(self):
+        field = Enumeration(['alpha', 'beta'])
+        self.assert_interpolated(field, None, 'alpha', 'beta')
+        self.assert_interpolated(field, ('${value}', 'alpha'), value='alpha')
 
 class TestFloat(FieldTestCase):
     def test_specification(self):
@@ -314,6 +363,12 @@ class TestFloat(FieldTestCase):
         self.assert_processed(field, 1.1)
         self.assert_not_processed(field, 'invalid', 1.0, 1.2, '')
 
+    def test_interpolation(self):
+        field = Float()
+        self.assert_interpolated(field, None, 1.0, (1, 1.0), (1L, 1.0))
+        self.assert_interpolated(field, ('${value}', 1.0), ('${value + 1}', 2.0),
+            value=1.0)
+
 class TestInteger(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Integer(minimum='bad'))
@@ -344,6 +399,11 @@ class TestInteger(FieldTestCase):
         field = Integer(constant=1)
         self.assert_processed(field, 1)
         self.assert_not_processed(field, 'invalid', 0, 2, '')
+
+    def test_interpolation(self):
+        field = Integer()
+        self.assert_interpolated(field, None, 1, 1L, (1.0, 1))
+        self.assert_interpolated(field, ('${value}', 1), ('${value + 1}', 2), value=1)
 
 class TestMap(FieldTestCase):
     def test_specification(self):
@@ -444,6 +504,15 @@ class TestMap(FieldTestCase):
         self.assertIsInstance(instance, attrmap)
         self.assertIsInstance(instance.a, valuewrapper)
         self.assertEqual(instance.a.value, 1)
+
+    def test_interpolation(self):
+        field = Map(Integer())
+        self.assert_interpolated(field, None, {}, ({'alpha': 1, 'beta': 2},
+            {'alpha': 1, 'beta': 2}))
+        self.assert_interpolated(field, ({'alpha': '${alpha}', 'beta': '${beta}'},
+            {'alpha': 1, 'beta': 2}), alpha=1, beta=2)
+        self.assert_interpolated(field, ('${value}', {'alpha': 1, 'beta': 2}),
+            value={'alpha': '${alpha}', 'beta': '${beta}'}, alpha=1, beta=2)
 
 class TestSequence(FieldTestCase):
     def generate_sequences(self):
@@ -573,6 +642,14 @@ class TestSequence(FieldTestCase):
         self.assertIsInstance(instance[1], valuewrapper)
         self.assertEqual(instance[1].value, 2)
 
+    def test_interpolation(self):
+        field = Sequence(Integer())
+        self.assert_interpolated(field, None, [])
+        self.assert_interpolated(field, (['${alpha}', '${beta}'], [1, 2]), alpha=1, beta=2)
+        self.assert_interpolated(field, ([1, 2], [1, 2]))
+        self.assert_interpolated(field, ('${value}', [1, 2]), value=['${alpha}', '${beta}'],
+            alpha=1, beta=2)
+
 class TestStructure(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda: Structure(True))
@@ -655,7 +732,7 @@ class TestStructure(FieldTestCase):
 
         self.assert_processed(field, {'identity': 'alpha', 'a': 1},
             {'identity': 'beta', 'b': 2})
-        self.assert_not_processed(field, 'unrecognized', {'identity': 'gamma'})
+        #self.assert_not_processed(field, 'unrecognized', {'identity': 'gamma'})
 
         expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
         self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
@@ -751,6 +828,15 @@ class TestStructure(FieldTestCase):
             self.assertIsInstance(instance, attrmap)
             self.assertEqual(instance.identity, value['identity'])
 
+    def test_interpolation(self):
+        field = Structure({'alpha': Integer(), 'beta': Text()})
+        self.assert_interpolated(field, None, {}, ({'alpha': 1, 'beta': 'two'},
+            {'alpha': 1, 'beta': 'two'}))
+        self.assert_interpolated(field, ({'alpha': '${alpha}', 'beta': '${beta}'},
+            {'alpha': 1, 'beta': 'two'}), alpha=1, beta='two')
+        self.assert_interpolated(field, ('${value}', {'alpha': 1, 'beta': 'two'}),
+            value={'alpha': '${alpha}', 'beta': '${beta}'}, alpha=1, beta='two')
+
 class TestText(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Text(min_length='bad'))
@@ -792,6 +878,12 @@ class TestText(FieldTestCase):
         self.assert_processed(field, 'a')
         self.assert_not_processed(field, 'invalid', '', 'b', 1)
 
+    def test_interpolation(self):
+        field = Text()
+        self.assert_interpolated(field, None, '', 'testing')
+        self.assert_interpolated(field, ('${alpha}', 'one'), ('${beta}', 'two'),
+            ('${alpha}, ${beta}', 'one, two'), alpha='one', beta='two')
+
 class TestTime(FieldTestCase):
     def construct(self, delta=None):
         now = datetime.now().time().replace(second=30, microsecond=0)
@@ -815,6 +907,13 @@ class TestTime(FieldTestCase):
         for field in (Time(maximum=now), Time(maximum=lambda: self.construct()[0])):
             self.assert_processed(field, (now, now_text), self.construct(-1))
             self.assert_not_processed(field, 'maximum', self.construct(+1))
+
+    def test_interpolation(self):
+        field = Time()
+        now, now_text = self.construct()
+
+        self.assert_interpolated(field, None, now)
+        self.assert_interpolated(field, ('${value}', now), value=now)
 
 class TestToken(FieldTestCase):
     def test_processing(self):
@@ -931,28 +1030,36 @@ class TestTuple(FieldTestCase):
         self.assertIsInstance(instance[1], valuewrapper)
         self.assertEqual(instance[1].value, 'test')
 
+    def test_interpolation(self):
+        field = Tuple((Integer(), Text()))
+        self.assert_interpolated(field, None, ((1, 'two'), (1, 'two')))
+        self.assert_interpolated(field, (('${alpha}', '${beta}'), (1, 'two')),
+            alpha=1, beta='two')
+        self.assert_interpolated(field, ('${value}', (1, 'two')),
+            value=('${alpha}', '${beta}'), alpha=1, beta='two')
+
 class TestUnion(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Union(True))
         self.assertRaises(SchemeError, lambda:Union((Date(), True)))
 
     def test_processing(self):
-        field = Union((Text(), Integer()))
+        field = Union(Text(), Integer())
         self.assert_processed(field, None, 'testing', 1)
         self.assert_not_processed(field, 'invalid', True, {}, [])
 
-        field = Union((Map(Integer()), Text()))
+        field = Union(Map(Integer()), Text())
         self.assert_processed(field, None, {'a': 1}, 'testing')
         self.assert_not_processed(field, 'invalid', 1, True, [])
 
     def test_undefined_fields(self):
         f = Undefined(Integer())
-        field = Union((Text(), f, Boolean()))
+        field = Union(Text(), f, Boolean())
         self.assert_processed(field, None, 'testing', 1, True)
         self.assert_not_processed(field, 'invalid', {}, [])
 
         f = Undefined()
-        field = Union((Text(), f, Boolean()))
+        field = Union(Text(), f, Boolean())
         f.define(Integer())
         self.assert_processed(field, None, 'testing', 1, True)
         self.assert_not_processed(field, 'invalid', {}, [])
@@ -966,3 +1073,9 @@ class TestUUID(FieldTestCase):
         self.assert_processed(field, None, self.uuid())
         self.assert_not_processed(field, 'invalid', True, '', self.uuid()[:-1])
 
+    def test_interpolation(self):
+        field = UUID()
+        uuid = self.uuid()
+
+        self.assert_interpolated(field, None, '', uuid)
+        self.assert_interpolated(field, ('${value}', uuid), value=uuid)

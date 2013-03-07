@@ -164,3 +164,6 @@ class ValidationError(StructuralError):
 class InvalidTypeError(ValidationError):
     """A validation error indicating the value being processed is invalid due
     to its type."""
+
+class UndefinedParameterError(SchemeError):
+    """Raised when interpolation encounters an undefined parameter."""
