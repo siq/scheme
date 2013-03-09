@@ -2,6 +2,22 @@ import re
 import sys
 from types import ClassType, ModuleType
 
+def abbreviate_string(value, maxlength=80):
+    if len(value) <= maxlength:
+        return value
+
+    half = (maxlength - 3) / 2
+
+    left = value[:half]
+    while not left[-1].isalnum():
+        left = left[:-1]
+
+    right = value[-half:]
+    while not right[0].isalnum():
+        right = right[1:]
+
+    return '%s...%s' % (left, right)
+
 def construct_all_list(namespace, cls):
     all = []
     for name, value in namespace.items():
@@ -104,9 +120,11 @@ def pluralize(word, quantity=None, rules=PLURALIZATION_RULES):
         return word + 's'
 
 class StructureFormatter(object):
-    def __init__(self, indent=4):
+    def __init__(self, abbreviate=False, masks=None, indent=4):
+        self.abbreviate = abbreviate
         self.indent = ' ' * indent
         self.indent_count = indent
+        self.masks = masks or []
 
     def format(self, structure, level=0):
         description = self._format_value(structure, level)
@@ -119,7 +137,14 @@ class StructureFormatter(object):
         singles, multiples = [], []
 
         for k, v in sorted(value.iteritems()):
-            description = self._format_value(v, level + 1)
+            try:
+                k = str(k)
+            except Exception:
+                pass
+            if k in self.masks:
+                description = '***MASKED***'
+            else:
+                description = self._format_value(v, level + 1)
             if isinstance(description, list):
                 multiples.append('%s%r: %s' % (inner_indent, k, description[0]))
                 multiples.extend(description[1:-1])
@@ -151,7 +176,14 @@ class StructureFormatter(object):
 
         return [tokens[0]] + lines + [tokens[1]]
 
-    def _format_long_string(self, value, level):
+    def _format_string(self, value, level):
+        try:
+            value = str(value)
+        except Exception:
+            pass
+
+        if self.abbreviate:
+            value = abbreviate_string(value)
         return repr(value)
 
     def _format_value(self, value, level):
@@ -161,12 +193,13 @@ class StructureFormatter(object):
             return self._format_list(value, level)
         elif isinstance(value, tuple):
             return self._format_list(value, level, '()')
-        elif isinstance(value, basestring) and len(value) + (self.indent_count * level) > 70:
-            return self._format_long_string(value, level)
+        elif isinstance(value, basestring):
+            return self._format_string(value, level)
         else:
             return repr(value)
 
-def format_structure(structure, level=0, formatter=StructureFormatter()):
+def format_structure(structure, abbreviate=False, masks=None, indent=4, level=0):
+    formatter = StructureFormatter(abbreviate, masks, indent)
     return formatter.format(structure, level)
 
 def traverse_to_key(value, path):
