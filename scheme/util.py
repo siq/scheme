@@ -119,6 +119,15 @@ def pluralize(word, quantity=None, rules=PLURALIZATION_RULES):
     else:
         return word + 's'
 
+def recursive_merge(original, addition):
+    for key, value in addition.iteritems():
+        if key in original:
+            source = original[key]
+            if isinstance(source, dict) and isinstance(value, dict):
+                value = recursive_merge(source, value)
+        original[key] = value
+    return original
+
 class StructureFormatter(object):
     def __init__(self, abbreviate=False, masks=None, indent=4):
         self.abbreviate = abbreviate

@@ -46,12 +46,15 @@ def slugify(value, spacer='-', lowercase=True):
         value = value.lower()
     return SPACER_EXPR.sub(spacer, value)
 
+def timestamp():
+    return current_timestamp().strftime('%Y%m%d%H%M%S')
+
 class Interpolator(object):
     """The standard jinja-based template renderer."""
 
     default_interpolator = None
     standard_filters = [pluralize, slugify]
-    standard_globals = [now]
+    standard_globals = [now, timestamp]
 
     def __init__(self, filters=None, globals=None):
         self.environment = jinja2.Environment(
