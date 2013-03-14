@@ -8,7 +8,7 @@ from time import mktime, strptime
 
 from scheme.exceptions import *
 from scheme.formats import Format
-from scheme.interpolation import interpolate_parameters
+from scheme.interpolation import interpolate_parameters, UndefinedValueError
 from scheme.timezone import LOCAL, UTC
 from scheme.util import *
 
@@ -1522,7 +1522,10 @@ class Structure(Field):
             except KeyError:
                 continue
             else:
-                interpolation[name] = field.interpolate(value, parameters, interpolator)
+                try:
+                    interpolation[name] = field.interpolate(value, parameters, interpolator)
+                except UndefinedValueError:
+                    continue
         return interpolation
 
     def merge(self, structure, prefer=False):

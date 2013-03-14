@@ -49,6 +49,9 @@ def slugify(value, spacer='-', lowercase=True):
 def timestamp():
     return current_timestamp().strftime('%Y%m%d%H%M%S')
 
+class UndefinedValueError(Exception):
+    pass
+
 class Interpolator(object):
     """The standard jinja-based template renderer."""
 
@@ -79,7 +82,10 @@ class Interpolator(object):
 
     def evaluate(self, subject, parameters):
         expression = self.environment.compile_expression(subject, False)
-        return expression(**parameters)
+        value = expression(**parameters)
+        if isinstance(value, self.environment.undefined):
+            raise UndefinedValueError()
+        return value
 
     def interpolate(self, subject, parameters):
         template = self.environment.from_string(subject)
