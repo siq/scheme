@@ -257,9 +257,11 @@ class UrlEncoded(StructuredText):
 class Yaml(Format):
     extensions = ['.yaml', '.yml']
     indent = '  '
+    indicators = '-?:,[]{}#&*!|>\'"%@`'
     line_width = 100
     mimetype = 'application/x-yaml'
     name = 'yaml'
+    requires_escape = (': ', ' #')
     requires_quotes = ('null', '~', 'true', 'false')
     whitespace = re.compile(r'^\s*$')
 
@@ -297,6 +299,17 @@ class Yaml(Format):
             return True
 
     @classmethod
+    def _requires_escaping(cls, value):
+        if value[0] in cls.indicators:
+            return True
+
+        for token in cls.requires_escape:
+            if token in value:
+                return True
+        else:
+            return False
+
+    @classmethod
     def _serialize_sequence(cls, value, level):
         if not value:
             return '[]'
@@ -331,7 +344,7 @@ class Yaml(Format):
             if isinstance(v, basestring):
                 content = cls._serialize_string(v, level + 1)
                 if isinstance(content, list):
-                    lines.append('%s %s' % (key, content[0]))
+                    lines.append('%s %s' % (key, content[0].lstrip()))
                     lines.extend(content[1:])
                 else:
                     lines.append('%s %s' % (key, content))
@@ -362,8 +375,14 @@ class Yaml(Format):
                     lines.append('')
             return lines
         elif length + len(indent) <= cls.line_width:
-            return value
+            if cls._requires_escaping(value):
+                return "'%s'" % value.replace("'", "''")
+            else:
+                return value
         else:
+            if cls._requires_escaping(value):
+                value = "'%s'" % value.replace("'", "''")
+
             wrapper = TextWrapper(width=cls.line_width, initial_indent=indent,
                 subsequent_indent=indent, break_long_words=False,
                 replace_whitespace=False, drop_whitespace=False)
