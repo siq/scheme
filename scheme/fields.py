@@ -113,6 +113,9 @@ class Field(object):
     :param dict errors: Optional, default is ``None``; specifies custom error
         strings for this field.
 
+    :param string title: Optional, default is ``None``; a public title for this field,
+        for when a more civilized age is longed for.
+
     :param string notes: Optional, notes of any length concerning the use of
         this field, used primarily for documentation.
 
@@ -143,14 +146,14 @@ class Field(object):
     ]
     equivalent = None
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
-        'ignore_null', 'required', 'notes', 'structural')
+        'ignore_null', 'required', 'title', 'notes', 'structural')
     preprocessor = None
     structural = False
 
     def __init__(self, name=None, description=None, default=None, nonnull=False,
-        ignore_null=False, required=False, constant=None, errors=None, notes=None,
-        nonempty=False, instantiator=None, extractor=None, preprocessor=None,
-        aspects=None, **params):
+        ignore_null=False, required=False, constant=None, errors=None, title=None,
+        notes=None, nonempty=False, instantiator=None, extractor=None,
+        preprocessor=None, aspects=None, **params):
 
         if nonempty:
             nonnull = required = True
@@ -176,6 +179,7 @@ class Field(object):
         self.notes = notes
         self.nonnull = nonnull
         self.required = required
+        self.title = title
 
         if preprocessor is not None:
             self.preprocessor = preprocessor
@@ -203,6 +207,8 @@ class Field(object):
             aspects.append('nonnull=True')
         if self.required:
             aspects.append('required=True')
+        if self.title:
+            aspects.append('title=%r' % self.name)
         if structure:
             aspects.append(structure)
         return '%s(%s)' % (type(self).__name__, ', '.join(aspects))
