@@ -144,6 +144,8 @@ class Field(object):
         Error('invalid', 'invalid value', '%(field)s is an invalid value'),
         Error('nonnull', 'null value', '%(field)s must be a non-null value'),
     ]
+
+    basetype = None
     equivalent = None
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
         'ignore_null', 'required', 'title', 'notes', 'structural')
@@ -480,6 +482,8 @@ class Binary(Field):
         Error('min_length', 'minimum length', '%(field)s must contain at least %(min_length)d %(noun)s'),
         Error('max_length', 'maximum length', '%(field)s must contain at most %(max_length)d %(noun)s'),
     ]
+
+    basetype = 'binary'
     parameters = ('max_length', 'min_length')
 
     def __init__(self, min_length=None, max_length=None, nonempty=False, **params):
@@ -530,6 +534,7 @@ class Binary(Field):
 class Boolean(Field):
     """A resource field for ``boolean`` values."""
 
+    basetype = 'boolean'
     equivalent = bool
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a boolean value'),
@@ -549,6 +554,7 @@ class Date(Field):
     """
 
 
+    basetype = 'date'
     equivalent = date
     parameters = ('maximum', 'minimum')
     pattern = '%Y-%m-%d'
@@ -626,6 +632,7 @@ class DateTime(Field):
     be converted back to the default timezone (typically local).
     """
 
+    basetype = 'datetime'
     equivalent = datetime
     parameters = ('maximum', 'minimum', 'utc')
     pattern = '%Y-%m-%dT%H:%M:%SZ'
@@ -706,6 +713,7 @@ class DateTime(Field):
 class Decimal(Field):
     """A resource field for decimal values."""
 
+    basetype = 'decimal'
     equivalent = decimal
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a decimal value'),
@@ -762,6 +770,7 @@ class Decimal(Field):
 class Definition(Field):
     """A field for field definitions."""
 
+    basetype = 'definition'
     equivalent = Field
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a field definition'),
@@ -804,6 +813,7 @@ class Enumeration(Field):
         also be specified as a single space-delimited string.
     """
 
+    basetype = 'enumeration'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be one of %(values)s')
     ]
@@ -851,6 +861,7 @@ class Float(Field):
         for this field.
     """
 
+    basetype = 'float'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a floating-point number'),
         Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)f'),
@@ -919,6 +930,7 @@ class Integer(Field):
         for this field.
     """
 
+    basetype = 'integer'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be an integer'),
         Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)d'),
@@ -993,6 +1005,7 @@ class Map(Field):
 
     key = None
     value = None
+    basetype = 'map'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a map'),
         Error('invalidkeys', 'invalid keys', '%(field)s must have valid keys'),
@@ -1138,6 +1151,7 @@ class Map(Field):
 class Object(Field):
     """A resource field for references to python objects."""
 
+    basetype = 'object'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a python object'),
         Error('import', 'object import', 'cannot import %(value)r'),
@@ -1176,6 +1190,7 @@ class Sequence(Field):
         the sequence cannot contain duplicate values.
     """
 
+    basetype = 'sequence'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a sequence'),
         Error('min_length', 'minimum length', '%(field)s must have at least %(min_length)d %(noun)s'),
@@ -1342,6 +1357,7 @@ class Structure(Field):
         values, if any, of the fields specified within ``structure`` into a ``dict``.
     """
 
+    basetype = 'structure'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a structure'),
         Error('required', 'required field', "%(field)s is missing required field '%(name)s'"),
@@ -1739,6 +1755,7 @@ class Text(Field):
         a shortcut argument.
     """
 
+    basetype = 'text'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a textual value'),
         Error('pattern', 'invalid value', '%(field)s has an invalid value'),
@@ -1835,6 +1852,7 @@ class Time(Field):
         either a ``time`` or a callable which returns a ``time``.
     """
 
+    basetype = 'time'
     equivalent = time
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a time value'),
@@ -1899,6 +1917,7 @@ class Token(Field):
         number of segments that valid values for this field must have.
     """
 
+    basetype = 'text'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a valid token')
     ]
@@ -1928,6 +1947,7 @@ class Tuple(Field):
         ``values`` at the class level.
     """
 
+    basetype = 'tuple'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a tuple'),
         Error('length', 'invalid length', '%(field)s must contain exactly %(length)d values'),
@@ -2062,6 +2082,7 @@ class Union(Field):
         which specifies ``fields`` at the class level.
     """
 
+    basetype = 'union'
     fields = None
     structural = True
 
@@ -2126,6 +2147,7 @@ class Union(Field):
 class UUID(Field):
     """A resource field for UUIDs."""
 
+    basetype = 'text'
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a UUID')
     ]
