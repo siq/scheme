@@ -140,17 +140,17 @@ class Field(object):
     __metaclass__ = FieldMeta
     types = {}
 
-    errors = [
-        Error('invalid', 'invalid value', '%(field)s is an invalid value'),
-        Error('nonnull', 'null value', '%(field)s must be a non-null value'),
-    ]
-
     basetype = None
     equivalent = None
     parameters = ('name', 'constant', 'description', 'default', 'nonnull',
         'ignore_null', 'required', 'title', 'notes', 'structural')
     preprocessor = None
     structural = False
+
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s is an invalid value'),
+        Error('nonnull', 'null value', '%(field)s must be a non-null value'),
+    ]
 
     def __init__(self, name=None, description=None, default=None, nonnull=False,
         ignore_null=False, required=False, constant=None, errors=None, title=None,
@@ -477,14 +477,14 @@ class Field(object):
 class Binary(Field):
     """A resource field for binary values."""
 
+    basetype = 'binary'
+    parameters = ('max_length', 'min_length')
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a binary value'),
         Error('min_length', 'minimum length', '%(field)s must contain at least %(min_length)d %(noun)s'),
         Error('max_length', 'maximum length', '%(field)s must contain at most %(max_length)d %(noun)s'),
     ]
-
-    basetype = 'binary'
-    parameters = ('max_length', 'min_length')
 
     def __init__(self, min_length=None, max_length=None, nonempty=False, **params):
         if nonempty:
@@ -536,6 +536,7 @@ class Boolean(Field):
 
     basetype = 'boolean'
     equivalent = bool
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a boolean value'),
     ]
@@ -715,6 +716,7 @@ class Decimal(Field):
 
     basetype = 'decimal'
     equivalent = decimal
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a decimal value'),
         Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)s'),
@@ -772,6 +774,7 @@ class Definition(Field):
 
     basetype = 'definition'
     equivalent = Field
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a field definition'),
         Error('invalidfield', 'invalid field', '%(field)s must be one of %(fields)s'),
@@ -814,10 +817,11 @@ class Enumeration(Field):
     """
 
     basetype = 'enumeration'
+    parameters = ('enumeration',)
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be one of %(values)s')
     ]
-    parameters = ('enumeration',)
 
     def __init__(self, enumeration, **params):
         super(Enumeration, self).__init__(**params)
@@ -862,12 +866,13 @@ class Float(Field):
     """
 
     basetype = 'float'
+    parameters = ('maximum', 'minimum')
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a floating-point number'),
         Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)f'),
         Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)f'),
     ]
-    parameters = ('maximum', 'minimum')
 
     def __init__(self, minimum=None, maximum=None, **params):
         super(Float, self).__init__(**params)
@@ -931,12 +936,13 @@ class Integer(Field):
     """
 
     basetype = 'integer'
+    parameters = ('maximum', 'minimum')
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be an integer'),
         Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)d'),
         Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)d'),
     ]
-    parameters = ('maximum', 'minimum')
 
     def __init__(self, minimum=None, maximum=None, **params):
         super(Integer, self).__init__(**params)
@@ -1003,16 +1009,17 @@ class Map(Field):
         string.
     """
 
-    key = None
-    value = None
     basetype = 'map'
+    key = None
+    parameters = ('required_keys',)
+    structural = True
+    value = None
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a map'),
         Error('invalidkeys', 'invalid keys', '%(field)s must have valid keys'),
         Error('required', 'required key', "%(field)s is missing required key '%(name)s'"),
     ]
-    parameters = ('required_keys',)
-    structural = True
 
     def __init__(self, value=None, key=None, required_keys=None, **params):
         super(Map, self).__init__(**params)
@@ -1152,6 +1159,7 @@ class Object(Field):
     """A resource field for references to python objects."""
 
     basetype = 'object'
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a python object'),
         Error('import', 'object import', 'cannot import %(value)r'),
@@ -1191,15 +1199,16 @@ class Sequence(Field):
     """
 
     basetype = 'sequence'
+    item = None
+    parameters = ('min_length', 'max_length', 'unique')
+    structural = True
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a sequence'),
         Error('min_length', 'minimum length', '%(field)s must have at least %(min_length)d %(noun)s'),
         Error('max_length', 'maximum length', '%(field)s must have at most %(max_length)d %(noun)s'),
         Error('duplicate', 'duplicate value', '%(field)s must not have duplicate values'),
     ]
-    item = None
-    parameters = ('min_length', 'max_length', 'unique')
-    structural = True
 
     def __init__(self, item=None, min_length=None, max_length=None, unique=False, **params):
         super(Sequence, self).__init__(**params)
@@ -1358,6 +1367,10 @@ class Structure(Field):
     """
 
     basetype = 'structure'
+    parameters = ('strict',)
+    structural = True
+    structure = None
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a structure'),
         Error('required', 'required field', "%(field)s is missing required field '%(name)s'"),
@@ -1365,9 +1378,6 @@ class Structure(Field):
         Error('unrecognized', 'unrecognized polymorphic identity',
             "%(field)s must specify a recognized polymorphic identity"),
     ]
-    parameters = ('strict',)
-    structure = None
-    structural = True
 
     def __init__(self, structure=None, strict=True, polymorphic_on=None, generate_default=False, 
             key_order=None, **params):
@@ -1756,6 +1766,9 @@ class Text(Field):
     """
 
     basetype = 'text'
+    parameters = ('max_length', 'min_length', 'strip')
+    pattern = None
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a textual value'),
         Error('pattern', 'invalid value', '%(field)s has an invalid value'),
@@ -1764,8 +1777,6 @@ class Text(Field):
         Error('max_length', 'maximum length',
             '%(field)s may contain at most %(max_length)d %(noun)s'),
     ]
-    parameters = ('max_length', 'min_length', 'strip')
-    pattern = None
 
     def __init__(self, pattern=None, min_length=None, max_length=None, strip=True,
             nonempty=False, **params):
@@ -1854,13 +1865,14 @@ class Time(Field):
 
     basetype = 'time'
     equivalent = time
+    parameters = ('maximum', 'minimum')
+    pattern = '%H:%M:%S'
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a time value'),
         Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
         Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
     ]
-    parameters = ('maximum', 'minimum')
-    pattern = '%H:%M:%S'
 
     def __init__(self, minimum=None, maximum=None, **params):
         super(Time, self).__init__(**params)
@@ -1918,10 +1930,11 @@ class Token(Field):
     """
 
     basetype = 'text'
+    pattern = re.compile(r'^\w[-+.\w]*(?<=\w)(?::\w[-+.\w]*(?<=\w))*$')
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a valid token')
     ]
-    pattern = re.compile(r'^\w[-+.\w]*(?<=\w)(?::\w[-+.\w]*(?<=\w))*$')
 
     def __init__(self, segments=None, **params):
         super(Token, self).__init__(**params)
@@ -1948,12 +1961,13 @@ class Tuple(Field):
     """
 
     basetype = 'tuple'
+    structural = True
+    values = None
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a tuple'),
         Error('length', 'invalid length', '%(field)s must contain exactly %(length)d values'),
     ]
-    structural = True
-    values = None
 
     def __init__(self, values=None, **params):
         super(Tuple, self).__init__(**params)
@@ -2148,10 +2162,11 @@ class UUID(Field):
     """A resource field for UUIDs."""
 
     basetype = 'text'
+    pattern = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
+
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a UUID')
     ]
-    pattern = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
 
     def __init__(self, **params):
         super(UUID, self).__init__(**params)
