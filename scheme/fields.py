@@ -78,9 +78,18 @@ class FieldMeta(type):
 
         if isinstance(specification, Field):
             return specification
-        if specification is not None:
-            constructor = field.types[specification.pop('__type__')]
-            return constructor.construct(specification)
+        if not specification:
+            return
+
+        if '__type__' in specification:
+            fieldtype = specification.pop('__type__')
+        elif 'type' in specification:
+            fieldtype = specification.pop('type')
+        else:
+            return
+
+        constructor = field.types[fieldtype]
+        return constructor.construct(**specification)
 
 class Field(object):
     """A resource field.
@@ -249,7 +258,7 @@ class Field(object):
         return type(self)(**params)
 
     @classmethod
-    def construct(cls, specification):
+    def construct(cls, **specification):
         """Constructs an instance of this field using ``specification``, which should be a
         dictionary of field parameters."""
 
@@ -421,8 +430,9 @@ class Field(object):
     @classmethod
     def _construct_parameter(cls, parameter):
         if isinstance(parameter, dict):
-            if '__type__' in parameter:
-                return Field.reconstruct(parameter)
+            field = Field.reconstruct(parameter)
+            if field:
+                return field
             else:
                 return dict((k, cls._construct_parameter(v)) for k, v in parameter.iteritems())
         elif isinstance(parameter, (list, tuple)):
