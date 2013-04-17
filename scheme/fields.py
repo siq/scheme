@@ -83,8 +83,8 @@ class FieldMeta(type):
 
         if '__type__' in specification:
             fieldtype = specification.pop('__type__')
-        elif 'type' in specification:
-            fieldtype = specification.pop('type')
+        #elif 'type' in specification:
+        #    fieldtype = specification.pop('type')
         else:
             return
 
