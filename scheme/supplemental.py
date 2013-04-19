@@ -24,7 +24,7 @@ class Email(Text):
 
     single_errors = [Error('pattern', 'invalid value', '%(field)s must be a valid email address')]
     multiple_errors = [Error('pattern', 'invalid value', '%(field)s must be a list of valid email addresses')]
-    parameters = ('multiple',)
+    parameters = {'extended': False, 'multiple': False}
 
     def __init__(self, multiple=False, extended=False, pattern=None, strip=None, **params):
         if multiple:

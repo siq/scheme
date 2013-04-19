@@ -47,13 +47,13 @@ class Error(object):
 class FieldMeta(type):
     def __new__(metatype, name, bases, namespace):
         declared_errors = namespace.pop('errors', ())
-        declared_parameters = namespace.pop('parameters', ())
+        declared_parameters = namespace.pop('parameters', {})
 
         field = type.__new__(metatype, name, bases, namespace)
         field.type = name.lower()
 
         errors = {}
-        parameters = set()
+        parameters = {}
 
         for base in reversed(bases):
             inherited_errors = getattr(base, 'errors', None)
@@ -151,10 +151,12 @@ class Field(object):
 
     basetype = None
     equivalent = None
-    parameters = ('name', 'constant', 'description', 'default', 'nonnull',
-        'ignore_null', 'required', 'title', 'notes', 'structural')
     preprocessor = None
     structural = False
+
+    parameters = {'name': None, 'constant': None, 'description': None, 'default': None,
+        'nonnull': False, 'ignore_null': False, 'required': False, 'title': None,
+        'notes': None, 'structural': False}
 
     errors = [
         Error('invalid', 'invalid value', '%(field)s is an invalid value'),
@@ -241,8 +243,8 @@ class Field(object):
         return self.name or '(%s)' % self.type
 
     def clone(self, **params):
-        """Clones this field by deep copying it. Keyword parameters are applied to the cloned
-        field before returning it."""
+        """Clones this field by deep copying it. Any keyboard parameters are applied to the
+        cloned field after cloning, overriding attributes already present."""
 
         if 'default' not in params:
             params['default'] = self.default
@@ -265,10 +267,27 @@ class Field(object):
         parameters = cls._construct_parameter(specification)
         return cls(**parameters)
 
-    def describe(self, parameters=None, **params):
-        """Constructs a serializable description of this field as a dictionary, which will
-        contain enough information to reconstruct this field in another context. Any keyword
-        parameters are mixed into the description."""
+    def describe(self, parameters=None, verbose=False, **params):
+        """Constructs a serializable description of this field, expressed as a dictionary
+        containing enough information to reconstruct this field in another context, but only
+        for certain purposes. In particular, attributes of this field which have values
+        which are not natively serializable are ignored. The description is suitable, however,
+        for clients, proxies, documentation and so forth. If this field is structural, the
+        description will be nested accordingly.
+
+        :param dict parameters: Optional, default is ``None``; if specified, indicates
+            additional field parameters which should be included in the description, as a
+            dictionary mapping parameter keys to their default values.
+
+        :param boolean verbose: Optional, default is ``False``; if ``True``, the description
+            will contain all possible parameters for this field (and nested fields), instead
+            of only those with a non-default value.
+
+        :param **params: Additional keyword parameters, if specified, will be serialized and
+            included in the description.
+
+        :rtype: dict
+        """
 
         description = {'__type__': self.type}
         for attr, value in self.aspects.iteritems():
@@ -281,10 +300,10 @@ class Field(object):
         for source in (self.parameters, parameters):
             if not source:
                 continue
-            for parameter in source:
+            for parameter, default_value in source.iteritems():
                 if parameter not in params:
                     value = getattr(self, parameter, None)
-                    if value is not None:
+                    if value is not None and (verbose or value is not default_value):
                         try:
                             description[parameter] = self._describe_parameter(value)
                         except CannotDescribeError:
@@ -300,7 +319,8 @@ class Field(object):
         return description
 
     def extract(self, subject, **params):
-        """Attempts to extract a valid value for this field from ``subject``."""
+        """Attempts to extract a valid value for this field from ``subject``, using the
+        ``extractor`` callback of this field."""
 
         if params and not self.screen(**params):
             raise FieldExcludedError(self)
@@ -335,8 +355,18 @@ class Field(object):
         return default
 
     def instantiate(self, value, key=None):
-        """Instantiates ``value``, which will be a valid for this field, into another
-        representation, as controlled by the ``instantiator`` aspect."""
+        """Attempts to instantiate ``value`` using the instantiator specified for
+        this field. If ``value`` is ``None`` or this field does not have an instantiator,
+        ``value`` is returned as is. Otherwise, the return value of the instantiator
+        for this field is returned.
+
+        :param value: The value to instantiate, which if not ``None`` should be a
+            valid value for this field.
+
+        :param key: Optional, default is ``None``; if specified, indicates the key
+            value for ``value`` within a parent structure. This parameter is typically
+            only specified in special circumstances.
+        """
 
         if value is not None and self.instantiator:
             return self.instantiator(self, value, key)
@@ -344,6 +374,9 @@ class Field(object):
             return value
 
     def interpolate(self, subject, parameters, interpolator=None):
+        """Attempts to interpolate variables within ``subject`` using the specified ``parameters``.
+        """
+
         equivalent = self.equivalent
         if subject is None or (equivalent and isinstance(subject, equivalent)):
             return subject
@@ -351,7 +384,8 @@ class Field(object):
             return interpolate_parameters(subject, parameters, interpolator, True)
 
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
-        """Processes ``value`` for this field.
+        """Processes ``value`` for this field, serializing or unserializing as appropriate,
+        then validating.
 
         :param value: The value to process.
 
@@ -488,7 +522,7 @@ class Binary(Field):
     """A resource field for binary values."""
 
     basetype = 'binary'
-    parameters = ('max_length', 'min_length')
+    parameters = {'max_length': None, 'min_length': None}
 
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a binary value'),
@@ -567,7 +601,7 @@ class Date(Field):
 
     basetype = 'date'
     equivalent = date
-    parameters = ('maximum', 'minimum')
+    parameters = {'maximum': None, 'minimum': None}
     pattern = '%Y-%m-%d'
 
     errors = [
@@ -645,7 +679,7 @@ class DateTime(Field):
 
     basetype = 'datetime'
     equivalent = datetime
-    parameters = ('maximum', 'minimum', 'utc')
+    parameters = {'maximum': None, 'minimum': None, 'utc': False}
     pattern = '%Y-%m-%dT%H:%M:%SZ'
 
     errors = [
@@ -780,9 +814,14 @@ class Decimal(Field):
                 'maximum', maximum=maximum)
 
 class Definition(Field):
-    """A field for field definitions."""
+    """A field for field definitions.
+
+    :param list fields: Optional, default is ``None``; if specified, indicates the field types
+        which the top-level field must be.
+    """
 
     basetype = 'definition'
+    parameters = {'fields': None}
     equivalent = Field
 
     errors = [
@@ -793,14 +832,16 @@ class Definition(Field):
     def __init__(self, fields=None, **params):
         super(Definition, self).__init__(**params)
         if fields:
+            if isinstance(fields, basestring):
+                fields = fields.split(' ')
             fields = tuple(fields)
             for field in fields:
-                if not (isinstance(field, type) and issubclass(field, Field)):
+                if field not in Field.types:
                     raise ValueError(fields)
 
         self.fields = fields
         if self.fields:
-            self.representation = ', '.join(sorted(field.__name__ for field in self.fields))
+            self.representation = ', '.join(sorted(self.fields))
 
     def _serialize_value(self, value):
         return value.describe()
@@ -814,7 +855,7 @@ class Definition(Field):
     def _validate_value(self, value, ancestry):
         if not isinstance(value, Field):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
-        if self.fields and not isinstance(value, self.fields):
+        if self.fields and value.type not in self.fields:
             raise ValidationError(identity=ancestry, field=self, value=value).construct(
                 'invalidfield', fields=self.representation)
 
@@ -827,7 +868,7 @@ class Enumeration(Field):
     """
 
     basetype = 'enumeration'
-    parameters = ('enumeration',)
+    parameters = {'enumeration': None}
 
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be one of %(values)s')
@@ -876,7 +917,7 @@ class Float(Field):
     """
 
     basetype = 'float'
-    parameters = ('maximum', 'minimum')
+    parameters = {'maximum': None, 'minimum': None}
 
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a floating-point number'),
@@ -946,7 +987,7 @@ class Integer(Field):
     """
 
     basetype = 'integer'
-    parameters = ('maximum', 'minimum')
+    parameters = {'maximum': None, 'minimum': None}
 
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be an integer'),
@@ -1021,7 +1062,7 @@ class Map(Field):
 
     basetype = 'map'
     key = None
-    parameters = ('required_keys',)
+    parameters = {'required_keys': None}
     structural = True
     value = None
 
@@ -1054,9 +1095,9 @@ class Map(Field):
         if self.required_keys is not None and not isinstance(self.required_keys, (list, tuple)):
             raise SchemeError('Map(required_keys) must be a list of strings')
 
-    def describe(self, parameters=None):
+    def describe(self, parameters=None, verbose=False):
         if not isinstance(self.value, Field):
-            return SchemeError()
+            raise SchemeError()
 
         default = None
         if self.default:
@@ -1064,10 +1105,10 @@ class Map(Field):
             for key, value in self.default.iteritems():
                 default[key] = self.value.process(value, OUTGOING, True)
 
-        params = {'value': self.value.describe(parameters), 'default': default}
+        params = {'value': self.value.describe(parameters, verbose), 'default': default}
         if self.key:
-            params['key'] = self.key.describe(parameters)
-        return super(Map, self).describe(parameters, **params)
+            params['key'] = self.key.describe(parameters, verbose)
+        return super(Map, self).describe(parameters, verbose, **params)
 
     def extract(self, subject, **params):
         if params and not self.screen(**params):
@@ -1210,7 +1251,7 @@ class Sequence(Field):
 
     basetype = 'sequence'
     item = None
-    parameters = ('min_length', 'max_length', 'unique')
+    parameters = {'min_length': None, 'max_length': None, 'unique': False}
     structural = True
 
     errors = [
@@ -1244,7 +1285,7 @@ class Sequence(Field):
         else:
             raise SchemeError('Sequence.max_length must be an integer if specified')
 
-    def describe(self, parameters=None):
+    def describe(self, parameters=None, verbose=False):
         if not isinstance(self.item, Field):
             raise SchemeError()
 
@@ -1252,8 +1293,8 @@ class Sequence(Field):
         if self.default:
             default = [self.item.process(value, OUTGOING, True) for value in self.default]
 
-        return super(Sequence, self).describe(parameters, item=self.item.describe(parameters),
-            default=default)
+        return super(Sequence, self).describe(parameters, verbose, 
+            item=self.item.describe(parameters, verbose), default=default)
 
     def extract(self, subject, **params):
         if params and not self.screen(**params):
@@ -1363,21 +1404,21 @@ class Structure(Field):
         can be ``None`` only when instantiating a subclass of ``Structure`` which specifies
         ``structure`` at the class level.
 
-    :param boolean strict: Optional, defaults to ``True``; if ``False``, key/value pairs
+    :param boolean strict: Optional, default is ``True``; if ``False``, key/value pairs
         which aren't present in ``structure`` will be silently ignored during validation
         instead of causing a :exc:`ValidationError` to be raised.
 
-    :param Field polymorphic_on: Optional, defaults to ``None``; if specified, should be
+    :param Field polymorphic_on: Optional, default is ``None``; if specified, should be
         a :class:`Field` instance which establishes the discriminator field for this
         structure, which is thusly considered polymorphic.
 
-    :param boolean generate_default: Optional, defaults to ``False``; if ``True``, a
+    :param boolean generate_default: Optional, default is ``False``; if ``True``, a
         default value for this field is dynamically constructed by collecting the default
         values, if any, of the fields specified within ``structure`` into a ``dict``.
     """
 
     basetype = 'structure'
-    parameters = ('strict',)
+    parameters = {'strict': True}
     structural = True
     structure = None
 
@@ -1442,7 +1483,7 @@ class Structure(Field):
     def polymorphic(self):
         return (self.polymorphic_on is not None)
 
-    def describe(self, parameters=None):
+    def describe(self, parameters=None, verbose=False):
         polymorphic_on = self.polymorphic_on
         if polymorphic_on:
             default = None
@@ -1460,21 +1501,21 @@ class Structure(Field):
             structure = {}
             for identity, candidate in self.structure.iteritems():
                 identity = polymorphic_on._serialize_value(identity)
-                structure[identity] = self._describe_structure(candidate, parameters)
+                structure[identity] = self._describe_structure(candidate, parameters, verbose)
 
-            return super(Structure, self).describe(parameters,
+            return super(Structure, self).describe(parameters, verbose,
                 default=default,
-                polymorphic_on=polymorphic_on.describe(parameters),
+                polymorphic_on=polymorphic_on.describe(parameters, verbose),
                 structure=structure)
         else:
             default = None
             if self.default:
                 default = self._describe_default(self.structure, self.default)
 
-            return super(Structure, self).describe(parameters,
+            return super(Structure, self).describe(parameters, verbose,
                 default=default,
                 polymorphic_on=None,
-                structure = self._describe_structure(self.structure, parameters))
+                structure=self._describe_structure(self.structure, parameters, verbose))
 
     def extract(self, subject, **params):
         if params and not self.screen(**params):
@@ -1675,11 +1716,11 @@ class Structure(Field):
             description[name] = structure[name]._serialize_value(value)
         return description
 
-    def _describe_structure(self, structure, parameters):
+    def _describe_structure(self, structure, parameters, verbose):
         description = {}
         for name, field in structure.iteritems():
             if isinstance(field, Field):
-                description[name] = field.describe(parameters)
+                description[name] = field.describe(parameters, verbose)
             else:
                 raise SchemeError()
         return description
@@ -1776,7 +1817,7 @@ class Text(Field):
     """
 
     basetype = 'text'
-    parameters = ('max_length', 'min_length', 'strip')
+    parameters = {'max_length': None, 'min_length': None, 'strip': True}
     pattern = None
 
     errors = [
@@ -1823,12 +1864,12 @@ class Text(Field):
             aspects.append('pattern=%r' % self.pattern.pattern)
         return super(Text, self).__repr__(aspects)
 
-    def describe(self, parameters=None):
+    def describe(self, parameters=None, verbose=False):
         if self.pattern:
             pattern = self.pattern.pattern
         else:
             pattern = None
-        return super(Text, self).describe(parameters, pattern=pattern)
+        return super(Text, self).describe(parameters, verbose, pattern=pattern)
 
     def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
@@ -1875,7 +1916,7 @@ class Time(Field):
 
     basetype = 'time'
     equivalent = time
-    parameters = ('maximum', 'minimum')
+    parameters = {'maximum': None, 'minimum': None}
     pattern = '%H:%M:%S'
 
     errors = [
@@ -2001,11 +2042,11 @@ class Tuple(Field):
 
         self.values = tuple(stack)
 
-    def describe(self, parameters=None):
+    def describe(self, parameters=None, verbose=False):
         values = []
         for value in self.values:
             if isinstance(value, Field):
-                values.append(value.describe(parameters))
+                values.append(value.describe(parameters, verbose))
             else:
                 raise SchemeError()
 
@@ -2016,7 +2057,7 @@ class Tuple(Field):
                 default.append(field.process(value, OUTGOING, True))
             default = tuple(default)
 
-        return super(Tuple, self).describe(parameters, values=values, default=default)
+        return super(Tuple, self).describe(parameters, verbose, values=values, default=default)
 
     def extract(self, subject, **params):
         if params and not self.screen(**params):
@@ -2132,14 +2173,14 @@ class Union(Field):
 
         self.fields = tuple(stack)
 
-    def describe(self, parameters=None):
+    def describe(self, parameters=None, verbose=False):
         fields = []
         for field in self.fields:
             if isinstance(field, Field):
-                fields.append(field.describe(parameters))
+                fields.append(field.describe(parameters, verbose))
             else:
                 raise SchemeError()
-        return super(Union, self).describe(parameters, fields=fields)
+        return super(Union, self).describe(parameters, verbose, fields=fields)
 
     def instantiate(self, value):
         raise NotImplementedError()
