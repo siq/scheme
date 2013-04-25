@@ -84,7 +84,8 @@ class Element(object):
         return instance
 
     def serialize(self, format='yaml'):
-        return self.schema.serialize(self.schema.extract(self), format)
+        schema = self.__class__.schema
+        return schema.serialize(schema.extract(self), format)
 
     @classmethod
     def unserialize(cls, value, format='yaml'):
