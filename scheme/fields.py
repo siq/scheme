@@ -847,8 +847,15 @@ class Definition(Field):
         return value.describe()
 
     def _unserialize_value(self, value, ancestry):
+        
+
+
         try:
-            return Field.reconstruct(value)
+            field = Field.reconstruct(value)
+            if field:
+                return field
+            else:
+                raise ValidationError(identity=ancestry, field=self, value=value).construct('invalid')
         except Exception:
             raise ValidationError(identity=ancestry, field=self, value=value).construct('invalid')
 
