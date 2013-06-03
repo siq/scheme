@@ -327,6 +327,15 @@ class TestEnumeration(FieldTestCase):
         self.assert_processed(field, None, *values)
         self.assert_not_processed(field, 'invalid', 'beta', 2, False)
 
+    def test_ignored_values(self):
+        field = Enumeration('alpha beta', ignored_values='gamma delta')
+        self.assert_processed(field, None, 'alpha', 'beta')
+        self.assertEqual(field.process('gamma', INCOMING, True), None)
+        self.assertEqual(field.process('gamma', INCOMING, False), None)
+        self.assertEqual(field.process('delta', INCOMING, True), None)
+        self.assertEqual(field.process('delta', INCOMING, False), None)
+        self.assert_not_processed(field, 'invalid', 'epsilon', 'iota')
+
     def test_interpolation(self):
         field = Enumeration(['alpha', 'beta'])
         self.assert_interpolated(field, None, 'alpha', 'beta')

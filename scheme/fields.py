@@ -872,6 +872,10 @@ class Enumeration(Field):
     :param list enumeration: The list of valid values for this field, all of which must be
         natively serializable (i.e., a ``bool``, ``float``, ``integer`` or ``string``). Can
         also be specified as a single space-delimited string.
+
+    :param list ignored_values: Optional, default is ``None``; if specified, a list of natively
+        serializable values for this field which are to be ignored and translated into ``None``
+        instead of triggering a validation error.
     """
 
     basetype = 'enumeration'
@@ -881,7 +885,7 @@ class Enumeration(Field):
         Error('invalid', 'invalid value', '%(field)s must be one of %(values)s')
     ]
 
-    def __init__(self, enumeration, **params):
+    def __init__(self, enumeration, ignored_values=None, **params):
         super(Enumeration, self).__init__(**params)
         if isinstance(enumeration, basestring):
             enumeration = enumeration.split(' ')
@@ -892,7 +896,17 @@ class Enumeration(Field):
         else:
             raise SchemeError('enumeration must be a list of natively serializable values')
 
+        if isinstance(ignored_values, basestring):
+            ignored_values = ignored_values.split(' ')
+        if isinstance(ignored_values, list):
+            for value in ignored_values:
+                if not isinstance(value, NATIVELY_SERIALIZABLE):
+                    raise SchemeError('ignored_values values must be natively serializable')
+        elif ignored_values is not None:
+            raise SchemeError('ignored_values must be a list of natively serializable values')
+
         self.enumeration = enumeration
+        self.ignored_values = ignored_values
         self.representation = ', '.join([repr(value) for value in enumeration])
 
     def interpolate(self, subject, parameters, interpolator=None):
@@ -907,6 +921,13 @@ class Enumeration(Field):
 
     def __repr__(self):
         return super(Enumeration, self).__repr__(['enumeration=[%s]' % self.representation])
+
+    def _is_null(self, value, ancestry):
+        ignored_values = self.ignored_values
+        if ignored_values and value in ignored_values:
+            value = None
+
+        return super(Enumeration, self)._is_null(value, ancestry)
 
     def _validate_value(self, value, ancestry):
         if value not in self.enumeration:
