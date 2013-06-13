@@ -211,6 +211,24 @@ def format_structure(structure, abbreviate=False, masks=None, indent=4, level=0)
     formatter = StructureFormatter(abbreviate, masks, indent)
     return formatter.format(structure, level)
 
+def set_nested_value(subject, path, value):
+    segments = path.split('.')
+    last = segments.pop()
+
+    for key in segments:
+        if isinstance(subject, dict):
+            if key in subject:
+                subject = subject[key]
+            else:
+                raise KeyError(path)
+        else:
+            raise TypeError(subject)
+
+    if not isinstance(subject, dict):
+        raise TypeError(subject)
+
+    subject[last] = value
+
 def traverse_to_key(value, path):
     for key in path.split('.'):
         if isinstance(value, dict):
