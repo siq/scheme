@@ -1448,7 +1448,6 @@ class Structure(Field):
     basetype = 'structure'
     parameters = {'strict': True}
     structural = True
-    structure = None
 
     errors = [
         Error('invalid', 'invalid value', '%(field)s must be a structure'),
@@ -1458,15 +1457,22 @@ class Structure(Field):
             "%(field)s must specify a recognized polymorphic identity"),
     ]
 
-    def __init__(self, structure=None, strict=True, polymorphic_on=None, generate_default=False, 
+    def __init__(self, structure, strict=True, polymorphic_on=None, generate_default=False, 
             key_order=None, **params):
-        
+
+        if not isinstance(structure, dict):
+            raise SchemeError(structure)
+
         if polymorphic_on:
+            if '*' in structure:
+                common = structure.pop('*')
+                for value in structure.itervalues():
+                    value.update(common)
             if isinstance(polymorphic_on, basestring):
-                polymorphic_on = Enumeration((structure or self.structure).keys(),
-                    name=polymorphic_on, nonempty=True)
+                polymorphic_on = Enumeration(structure.keys(), nonempty=True,
+                    name=polymorphic_on)
             if not isinstance(polymorphic_on, Field):
-                raise SchemeError()
+                raise SchemaError()
             if not polymorphic_on.required:
                 polymorphic_on = polymorphic_on.clone(required=True)
 
@@ -1477,17 +1483,13 @@ class Structure(Field):
         self.key_order = key_order
         self.polymorphic_on = polymorphic_on
         self.strict = strict
-
-        if structure is not None:
-            self.structure = structure
-        if not isinstance(self.structure, dict):
-            raise SchemeError()
+        self.structure = structure
 
         if polymorphic_on:
             for identity, candidate in self.structure.iteritems():
                 self._prevalidate_structure(candidate, identity)
                 if polymorphic_on in candidate:
-                    raise SchemeError()
+                    raise SchemaError()
                 else:
                     candidate[polymorphic_on.name] = polymorphic_on.clone(constant=identity)
         else:

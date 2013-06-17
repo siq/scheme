@@ -746,6 +746,17 @@ class TestStructure(FieldTestCase):
         expected_error = ValidationError(structure={'identity': 'alpha', 'b': UNKNOWN_ERROR})
         self.assert_not_processed(field, expected_error, {'identity': 'alpha', 'b': 2})
 
+    def test_polymorphism_with_common_fields(self):
+        field = Structure({
+            '*': {'n': Integer()},
+            'alpha': {'a': Integer()},
+            'beta': {'b': Integer()},
+        }, polymorphic_on='identity')
+
+        self.assert_processed(field, None)
+        self.assert_processed(field, {'identity': 'alpha', 'a': 1, 'n': 3},
+            {'identity': 'beta', 'b': 2, 'n': 3})
+
     def test_naive_extraction(self):
         field = Structure({'a': Integer()})
         value = {'a': 1}
