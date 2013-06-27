@@ -6,6 +6,8 @@ from scheme.exceptions import *
 from scheme.fields import Field, Error, Text
 from scheme.util import construct_all_list, identify_object, import_object
 
+__all__ = ('Email',)
+
 EMAIL_EXPR = (
     r"([-!#$%&'*+/=?^_`{}|~0-9a-zA-Z]+(\.[-!#$%&'*+/=?^_`{}|~0-9a-zA-Z]+)*"
     r'|"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"'
