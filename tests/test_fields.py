@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from scheme.exceptions import *
 from scheme.fields import *
+from scheme.surrogate import surrogate
 from scheme.timezone import LOCAL, UTC
 
 def construct_now(delta=None):
@@ -856,6 +857,56 @@ class TestStructure(FieldTestCase):
             {'alpha': 1, 'beta': 'two'}), alpha=1, beta='two')
         self.assert_interpolated(field, ('${value}', {'alpha': 1, 'beta': 'two'}),
             value={'alpha': '${alpha}', 'beta': '${beta}'}, alpha=1, beta='two')
+
+class surrogate_subclass(surrogate):
+    schema = Structure({
+        'id': Text(nonempty=True),
+        'value': Integer(),
+    })
+
+    def describe(self):
+        return '%(id)s:%(value)s' % self
+
+class TestSurrogate(FieldTestCase):
+    def test_naive_processing(self):
+        field = Surrogate()
+        self.assert_processed(field, None)
+        
+        instance = field.process({'a': 1}, INCOMING, True)
+        self.assertIsInstance(instance, surrogate)
+        self.assertEqual(instance, {'a': 1})
+
+        value = field.process(instance, OUTGOING, True)
+        self.assertNotIsInstance(value, surrogate)
+        self.assertIsInstance(value, dict)
+        self.assertEqual(value, {'_': 'scheme.surrogate.surrogate', 'a': 1})
+
+    def test_schema_processing(self):
+        field = Surrogate()
+        value = {'_': surrogate_subclass.surrogate, 'id': 'alpha', 'value': 1}
+
+        instance = field.process(value, INCOMING, True)
+        self.assertIsInstance(instance, surrogate_subclass)
+        self.assertEqual(instance, {'id': 'alpha', 'value': 1})
+        self.assertEqual(instance.describe(), 'alpha:1')
+
+        serialized_value = field.process(instance, OUTGOING, True)
+        self.assertNotIsInstance(serialized_value, surrogate_subclass)
+        self.assertIsInstance(serialized_value, dict)
+        self.assertEqual(serialized_value, value)
+
+        value = {'_': surrogate_subclass.surrogate, 'value': 1}
+        self.assertRaises(ValidationError, lambda:field.process(value, INCOMING, True))
+
+    def test_surrogates_validation(self):
+        field = Surrogate(surrogates=surrogate_subclass.surrogate)
+
+    def test_interpolation(self):
+        field = Surrogate()
+        value = surrogate({'a': 1})
+
+        self.assert_interpolated(field, None, value)
+        self.assert_interpolated(field, ('${value}', value), value=value)
 
 class TestText(FieldTestCase):
     def test_specification(self):

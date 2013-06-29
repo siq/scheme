@@ -9,6 +9,7 @@ from time import mktime, strptime
 from scheme.exceptions import *
 from scheme.formats import Format
 from scheme.interpolation import interpolate_parameters, UndefinedValueError
+from scheme.surrogate import surrogate
 from scheme.timezone import LOCAL, UTC
 from scheme.util import *
 
@@ -436,22 +437,22 @@ class Field(object):
         else:
             return True
 
-    def serialize(self, value, format=None, **params):
+    def serialize(self, value, format=None, ancestry=None, **params):
         """Serializes ``value`` to ``format``, if specified, after processing it
         as an outgoing value for this field."""
 
-        value = self.process(value, OUTGOING, True)
+        value = self.process(value, OUTGOING, True, ancestry)
         if format:
             value = Format.formats[format].serialize(value, **params)
         return value
 
-    def unserialize(self, value, format=None, **params):
+    def unserialize(self, value, format=None, ancestry=None, **params):
         """Unserializes ``value`` from ``format``, if specified, before processing
         it as an incoming value for this field."""
 
         if format:
             value = Format.formats[format].unserialize(value, **params)
-        return self.process(value, INCOMING, True)
+        return self.process(value, INCOMING, True, ancestry)
 
     @classmethod
     def visit(cls, specification, callback):
@@ -847,9 +848,6 @@ class Definition(Field):
         return value.describe()
 
     def _unserialize_value(self, value, ancestry):
-        
-
-
         try:
             field = Field.reconstruct(value)
             if field:
@@ -1547,6 +1545,16 @@ class Structure(Field):
                 polymorphic_on=None,
                 structure=self._describe_structure(self.structure, parameters, verbose))
 
+    def extend(self, structure):
+        extension = self.clone()
+        for name, field in structure.iteritems():
+            if not isinstance(field, Field):
+                raise TypeError(field)
+            if field.name != name:
+                field.name = name
+            extension.structure[name] = field
+        return extension
+
     def extract(self, subject, **params):
         if params and not self.screen(**params):
             raise FieldExcludedError(self)
@@ -1644,7 +1652,7 @@ class Structure(Field):
     def merge(self, structure, prefer=False):
         for name, field in structure.iteritems():
             if not isinstance(field, Field):
-                raise Exception()
+                raise TypeError(field)
             if name in self.structure and not prefer:
                 return
             if field.name != name:
@@ -1825,6 +1833,49 @@ class Structure(Field):
                 for identity, candidate in specification['structure'].iteritems())}
         else:
             return {'structure': visit(specification['structure'])}
+
+class Surrogate(Field):
+    """A field for surrogates.
+
+    :param list surrogates: Optional, default is ``None``; if specified, indicates the specific
+        surrogate types accepted by this field. If ``None``, all surrogate types are accepted.
+    """
+
+    basetype = 'structure'
+    equivalent = surrogate
+    parameters = {'surrogates': None}
+    
+    errors = [
+        Error('invalid', 'invalid value', '%(field)s must be a surrogate'),
+        Error('invalid-surrogate', 'invalid surrogate', '%(field)s must be one of %(surrogate)s'),
+    ]
+
+    def __init__(self, surrogates=None, **params):
+        super(Surrogate, self).__init__(**params)
+        if surrogates:
+            if isinstance(surrogates, basestring):
+                surrogates = surrogates.split(' ')
+            self.surrogates = tuple(surrogates)
+        else:
+            self.surrogates = None
+
+    def _serialize_value(self, value):
+        return value.serialize()
+
+    def _unserialize_value(self, value, ancestry):
+        if isinstance(value, dict):
+            return surrogate.unserialize(value, ancestry)
+        elif isinstance(value, surrogate):
+            return value
+        else:
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+
+    def _validate_value(self, value, ancestry):
+        if not isinstance(value, surrogate):
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+        if self.surrogates and value.identity not in self.surrogates:
+            raise ValidationError(identity=ancestry, field=self, value=value).construct(
+                'invalid-surrogate', surrogates=', '.join(sorted(self.surrogates)))
 
 class Text(Field):
     """A resource field for text values.
