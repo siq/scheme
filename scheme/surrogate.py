@@ -24,7 +24,7 @@ class surrogate(dict):
         return '%s(%s)' % (self.surrogate, super(surrogate, self).__repr__())
 
     @classmethod
-    def construct(cls, implementation, value=None, **params):
+    def construct(cls, implementation, value=None, strict=False, **params):
         if isinstance(implementation, basestring):
             implementation = cls._get_implementation(implementation)
         if params:
@@ -39,7 +39,7 @@ class surrogate(dict):
 
         implementation.contribute(value)
         if implementation.schema:
-            value = implementation.schema.extract(value)
+            value = implementation.schema.extract(value, strict=strict)
         return implementation(value)
 
     @classmethod
