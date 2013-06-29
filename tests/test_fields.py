@@ -661,6 +661,10 @@ class TestSequence(FieldTestCase):
             alpha=1, beta=2)
 
 class TestStructure(FieldTestCase):
+    class ExtractionTarget(object):
+        def __init__(self, **params):
+            self.__dict__.update(**params)
+
     def test_specification(self):
         self.assertRaises(SchemeError, lambda: Structure(True))
         self.assertRaises(SchemeError, lambda: Structure({'a': True}))
@@ -811,6 +815,20 @@ class TestStructure(FieldTestCase):
 
         self.assertIsInstance(extracted, dict)
         self.assertEqual(extracted, {'a': 1, 'b': 'test'})
+
+    def test_object_extraction(self):
+        field = Structure({'a': Integer(), 'b': Text()})
+        target = self.ExtractionTarget(a=1, b='b', c='c', d=4)
+        extracted = field.extract(target, strict=False)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1, 'b': 'b'})
+
+        target = self.ExtractionTarget(a=1, c='c')
+        extracted = field.extract(target, strict=False)
+
+        self.assertIsInstance(extracted, dict)
+        self.assertEqual(extracted, {'a': 1})
 
     def test_instantiation(self):
         field = Structure({'a': Integer(), 'b': Text()}, instantiator=attrmap)

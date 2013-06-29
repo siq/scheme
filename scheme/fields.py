@@ -1555,7 +1555,7 @@ class Structure(Field):
             extension.structure[name] = field
         return extension
 
-    def extract(self, subject, **params):
+    def extract(self, subject, strict=True, **params):
         if params and not self.screen(**params):
             raise FieldExcludedError(self)
 
@@ -1563,18 +1563,22 @@ class Structure(Field):
             return subject
         if self.extractor:
             subject = self.extractor(self, subject)
-        if not isinstance(subject, dict):
+
+        getter = getattr
+        if isinstance(subject, dict):
+            getter = getitem
+        elif strict:
             raise ValueError(subject)
 
-        definition = self._get_definition(subject)
+        definition = self._get_definition(subject, getter)
         extraction = {}
 
         for name, field in definition.iteritems():
             try:
-                value = subject[name]
+                value = getter(subject, name)
                 if value is None:
                     continue
-            except KeyError:
+            except (AttributeError, KeyError):
                 continue
 
             try:
@@ -1778,8 +1782,8 @@ class Structure(Field):
                 default[name] = field.default
         return default
 
-    def _get_definition(self, value):
-        identity = self._get_polymorphic_identity(value)
+    def _get_definition(self, value, getter=getitem):
+        identity = self._get_polymorphic_identity(value, getter)
         if identity:
             return self.structure[identity]
         else:
@@ -1796,10 +1800,10 @@ class Structure(Field):
         else:
             return key_order
 
-    def _get_polymorphic_identity(self, value):
+    def _get_polymorphic_identity(self, value, getter=getitem):
         polymorphic_on = self.polymorphic_on
         if polymorphic_on:
-            identity = value.get(polymorphic_on.name)
+            identity = getter(value, polymorphic_on.name, None)
             if identity is not None:
                 return identity
             else:

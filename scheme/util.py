@@ -2,6 +2,8 @@ import re
 import sys
 from types import ClassType, ModuleType
 
+NODEFAULT = object()
+
 def abbreviate_string(value, maxlength=80):
     if len(value) <= maxlength:
         return value
@@ -24,6 +26,12 @@ def construct_all_list(namespace, cls):
         if isinstance(value, (ClassType, type)) and issubclass(value, cls):
             all.append(name)
     return all
+
+def getitem(obj, key, default=NODEFAULT):
+    if default is not NODEFAULT:
+        return obj.get(key, default)
+    else:
+        return obj[key]
 
 def identify_object(obj, cache={}):
     if isinstance(obj, ModuleType):

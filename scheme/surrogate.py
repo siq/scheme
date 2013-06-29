@@ -25,6 +25,8 @@ class surrogate(dict):
 
     @classmethod
     def construct(cls, implementation, value=None, **params):
+        if isinstance(implementation, basestring):
+            implementation = cls._get_implementation(implementation)
         if params:
             if value:
                 value = dict(value, **params)
@@ -35,11 +37,14 @@ class surrogate(dict):
         else:
             raise ValueError(value)
 
-        if isinstance(implementation, basestring):
-            implementation = cls._get_implementation(implementation)
+        implementation.contribute(value)
         if implementation.schema:
             value = implementation.schema.extract(value)
         return implementation(value)
+
+    @classmethod
+    def contribute(cls, value):
+        pass
 
     def serialize(self):
         value = dict(self, _=self.surrogate)
