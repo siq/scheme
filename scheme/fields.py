@@ -1966,13 +1966,6 @@ class Text(Field):
             aspects.append('pattern=%r' % self.pattern.pattern)
         return super(Text, self).__repr__(aspects)
 
-    def describe(self, parameters=None, verbose=False):
-        if self.pattern:
-            pattern = self.pattern.pattern
-        else:
-            pattern = None
-        return super(Text, self).describe(parameters, verbose, pattern=pattern)
-
     def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return subject
