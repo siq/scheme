@@ -27,19 +27,24 @@ class surrogate(dict):
     def construct(cls, implementation, value=None, strict=False, **params):
         if isinstance(implementation, basestring):
             implementation = cls._get_implementation(implementation)
-        if params:
-            if value:
-                value = dict(value, **params)
+
+        if value is not None:
+            if isinstance(value, dict):
+                value = dict(value)
+                if implementation.schema:
+                    value = implementation.schema.extract(value)
+            elif not strict and implementation.schema:
+                value = implementation.schema.extract(value, strict=False)
             else:
-                value = params
-        elif value:
-            value = dict(value)
+                raise ValueError(value)
+            if params:
+                value.update(params)
+        elif params:
+            value = params
         else:
             raise ValueError(value)
 
         implementation.contribute(value)
-        if implementation.schema:
-            value = implementation.schema.extract(value, strict=strict)
         return implementation(value)
 
     @classmethod
