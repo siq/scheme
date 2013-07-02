@@ -1,3 +1,4 @@
+from scheme.interpolation import interpolate_parameters
 from scheme.util import identify_object, import_object
 
 class SurrogateMeta(type):
@@ -50,6 +51,14 @@ class surrogate(dict):
     @classmethod
     def contribute(cls, value):
         pass
+
+    @classmethod
+    def interpolate(cls, value, parameters, interpolator=None):
+        implementation = cls._get_implementation(value.get('_'))
+        if implementation.schema:
+            return implementation.schema.interpolate(value, parameters, interpolator)
+        else:
+            return value # should probably best effort this
 
     def serialize(self):
         value = dict(self, _=self.surrogate)

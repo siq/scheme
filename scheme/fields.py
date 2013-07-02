@@ -1880,6 +1880,17 @@ class Surrogate(Field):
         else:
             self.surrogates = None
 
+    def interpolate(self, subject, parameters, interpolator=None):
+        if subject is None:
+            return None
+        if isinstance(subject, basestring):
+            subject = interpolate_parameters(subject, parameters, interpolator, True)
+        if isinstance(subject, surrogate):
+            return subject
+        if not isinstance(subject, dict):
+            raise ValueError(subject)
+        return surrogate.interpolate(subject, parameters, interpolator)
+
     def _serialize_value(self, value):
         return value.serialize()
 
