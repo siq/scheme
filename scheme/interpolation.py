@@ -92,6 +92,20 @@ class Interpolator(object):
         return template.render(parameters)
 
 def interpolate_parameters(subject, parameters, interpolator=None, simple=False):
+    """Interpolates ``subject``, a template, using ``parameters.``
+
+    :param string subject: The template to interpolate.
+
+    :param dict parameters: A ``dict`` of potential values for interpolating
+        ``subject``.
+
+    :param interpolator: Optional, defaults to ``None``; if specified, an
+        :cls:`Interpolator` instance to use for the interpolation, rather then
+        the default one.
+
+    :param boolean simple: Optional, defaults to ``False``; if ``True``. 
+    """
+
     if not isinstance(subject, basestring):
         raise ValueError(subject)
     if not subject:

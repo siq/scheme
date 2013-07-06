@@ -30,7 +30,7 @@ class CannotDescribeError(Exception):
 class FieldExcludedError(Exception):
     """Raised when a field is excluded during the extraction of a value."""
 
-class Error(object):
+class FieldError(object):
     """A field error."""
 
     def __init__(self, token, title, message, show_field=True, show_value=True):
@@ -65,8 +65,8 @@ class FieldMeta(type):
                 parameters.update(inherited_parameters)
 
         field.errors = errors
-        for error in declared_errors:
-            errors[error.token] = error
+        for declared_error in declared_errors:
+            errors[declared_error.token] = declared_error
 
         parameters.update(declared_parameters)
         field.parameters = parameters
@@ -160,8 +160,8 @@ class Field(object):
         'notes': None, 'structural': False}
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s is an invalid value'),
-        Error('nonnull', 'null value', '%(field)s must be a non-null value'),
+        FieldError('invalid', 'invalid value', '%(field)s is an invalid value'),
+        FieldError('nonnull', 'null value', '%(field)s must be a non-null value'),
     ]
 
     def __init__(self, name=None, description=None, default=None, nonnull=False,
@@ -526,9 +526,9 @@ class Binary(Field):
     parameters = {'max_length': None, 'min_length': None}
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a binary value'),
-        Error('min_length', 'minimum length', '%(field)s must contain at least %(min_length)d %(noun)s'),
-        Error('max_length', 'maximum length', '%(field)s must contain at most %(max_length)d %(noun)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a binary value'),
+        FieldError('min_length', 'minimum length', '%(field)s must contain at least %(min_length)d %(noun)s'),
+        FieldError('max_length', 'maximum length', '%(field)s must contain at most %(max_length)d %(noun)s'),
     ]
 
     def __init__(self, min_length=None, max_length=None, nonempty=False, **params):
@@ -583,7 +583,7 @@ class Boolean(Field):
     equivalent = bool
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a boolean value'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a boolean value'),
     ]
 
     def _validate_value(self, value, ancestry):
@@ -606,9 +606,9 @@ class Date(Field):
     pattern = '%Y-%m-%d'
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a date value'),
-        Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
-        Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a date value'),
+        FieldError('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
+        FieldError('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
     ]
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -684,9 +684,9 @@ class DateTime(Field):
     pattern = '%Y-%m-%dT%H:%M:%SZ'
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a datetime value'),
-        Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
-        Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a datetime value'),
+        FieldError('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
+        FieldError('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
     ]
 
     def __init__(self, minimum=None, maximum=None, utc=False, **params):
@@ -763,9 +763,9 @@ class Decimal(Field):
     equivalent = decimal
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a decimal value'),
-        Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)s'),
-        Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a decimal value'),
+        FieldError('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)s'),
+        FieldError('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)s'),
     ]
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -826,8 +826,8 @@ class Definition(Field):
     equivalent = Field
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a field definition'),
-        Error('invalidfield', 'invalid field', '%(field)s must be one of %(fields)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a field definition'),
+        FieldError('invalidfield', 'invalid field', '%(field)s must be one of %(fields)s'),
     ]
 
     def __init__(self, fields=None, **params):
@@ -880,7 +880,7 @@ class Enumeration(Field):
     parameters = {'enumeration': None}
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be one of %(values)s')
+        FieldError('invalid', 'invalid value', '%(field)s must be one of %(values)s')
     ]
 
     def __init__(self, enumeration, ignored_values=None, **params):
@@ -932,6 +932,30 @@ class Enumeration(Field):
             raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid',
                 values=self.representation)
 
+class Error(Field):
+    """A field for error values."""
+
+    basetype = 'tuple'
+
+    errors = [
+        FieldError('invalid', 'invalid value', '%(field)s must be a structural error'),
+    ]
+
+    def _serialize_value(self, value):
+        return value.serialize()
+
+    def _unserialize_value(self, value, ancestry):
+        if isinstance(value, StructuralError):
+            return value
+        elif isinstance(value, tuple) and len(value) == 2:
+            return StructuralError.unserialize(value)
+        else:
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+
+    def _validate_value(self, value, ancestry):
+        if not isinstance(value, StructuralError):
+            raise InvalidTypeError(identity=ancestry, field=self, value=value).construct('invalid')
+
 class Float(Field):
     """A resource field for ``float`` values.
 
@@ -946,9 +970,9 @@ class Float(Field):
     parameters = {'maximum': None, 'minimum': None}
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a floating-point number'),
-        Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)f'),
-        Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)f'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a floating-point number'),
+        FieldError('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)f'),
+        FieldError('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)f'),
     ]
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -1016,9 +1040,9 @@ class Integer(Field):
     parameters = {'maximum': None, 'minimum': None}
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be an integer'),
-        Error('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)d'),
-        Error('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)d'),
+        FieldError('invalid', 'invalid value', '%(field)s must be an integer'),
+        FieldError('minimum', 'minimum value', '%(field)s must be greater then or equal to %(minimum)d'),
+        FieldError('maximum', 'maximum value', '%(field)s must be less then or equal to %(maximum)d'),
     ]
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -1093,9 +1117,9 @@ class Map(Field):
     value = None
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a map'),
-        Error('invalidkeys', 'invalid keys', '%(field)s must have valid keys'),
-        Error('required', 'required key', "%(field)s is missing required key '%(name)s'"),
+        FieldError('invalid', 'invalid value', '%(field)s must be a map'),
+        FieldError('invalidkeys', 'invalid keys', '%(field)s must have valid keys'),
+        FieldError('required', 'required key', "%(field)s is missing required key '%(name)s'"),
     ]
 
     def __init__(self, value=None, key=None, required_keys=None, **params):
@@ -1238,8 +1262,8 @@ class Object(Field):
     basetype = 'object'
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a python object'),
-        Error('import', 'object import', 'cannot import %(value)r'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a python object'),
+        FieldError('import', 'object import', 'cannot import %(value)r'),
     ]
 
     def get_default(self):
@@ -1281,10 +1305,10 @@ class Sequence(Field):
     structural = True
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a sequence'),
-        Error('min_length', 'minimum length', '%(field)s must have at least %(min_length)d %(noun)s'),
-        Error('max_length', 'maximum length', '%(field)s must have at most %(max_length)d %(noun)s'),
-        Error('duplicate', 'duplicate value', '%(field)s must not have duplicate values'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a sequence'),
+        FieldError('min_length', 'minimum length', '%(field)s must have at least %(min_length)d %(noun)s'),
+        FieldError('max_length', 'maximum length', '%(field)s must have at most %(max_length)d %(noun)s'),
+        FieldError('duplicate', 'duplicate value', '%(field)s must not have duplicate values'),
     ]
 
     def __init__(self, item=None, min_length=None, max_length=None, unique=False, **params):
@@ -1453,10 +1477,10 @@ class Structure(Field):
     structural = True
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a structure'),
-        Error('required', 'required field', "%(field)s is missing required field '%(name)s'"),
-        Error('unknown', 'unknown field', "%(field)s includes an unknown field '%(name)s'"),
-        Error('unrecognized', 'unrecognized polymorphic identity',
+        FieldError('invalid', 'invalid value', '%(field)s must be a structure'),
+        FieldError('required', 'required field', "%(field)s is missing required field '%(name)s'"),
+        FieldError('unknown', 'unknown field', "%(field)s includes an unknown field '%(name)s'"),
+        FieldError('unrecognized', 'unrecognized polymorphic identity',
             "%(field)s must specify a recognized polymorphic identity"),
     ]
 
@@ -1867,8 +1891,8 @@ class Surrogate(Field):
     parameters = {'surrogates': None}
     
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a surrogate'),
-        Error('invalid-surrogate', 'invalid surrogate', '%(field)s must be one of %(surrogate)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a surrogate'),
+        FieldError('invalid-surrogate', 'invalid surrogate', '%(field)s must be one of %(surrogate)s'),
     ]
 
     def __init__(self, surrogates=None, **params):
@@ -1934,11 +1958,11 @@ class Text(Field):
     pattern = None
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a textual value'),
-        Error('pattern', 'invalid value', '%(field)s has an invalid value'),
-        Error('min_length', 'minimum length', 
+        FieldError('invalid', 'invalid value', '%(field)s must be a textual value'),
+        FieldError('pattern', 'invalid value', '%(field)s has an invalid value'),
+        FieldError('min_length', 'minimum length', 
             '%(field)s must contain at least %(min_length)d non-whitespace %(noun)s'),
-        Error('max_length', 'maximum length',
+        FieldError('max_length', 'maximum length',
             '%(field)s may contain at most %(max_length)d %(noun)s'),
     ]
 
@@ -2026,9 +2050,9 @@ class Time(Field):
     pattern = '%H:%M:%S'
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a time value'),
-        Error('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
-        Error('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a time value'),
+        FieldError('minimum', 'minimum value', '%(field)s must not occur before %(minimum)s'),
+        FieldError('maximum', 'maximum value', '%(field)s must not occur after %(maximum)s'),
     ]
 
     def __init__(self, minimum=None, maximum=None, **params):
@@ -2090,7 +2114,7 @@ class Token(Field):
     pattern = re.compile(r'^\w[-+.\w]*(?<=\w)(?::\w[-+.\w]*(?<=\w))*$')
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a valid token')
+        FieldError('invalid', 'invalid value', '%(field)s must be a valid token')
     ]
 
     def __init__(self, segments=None, **params):
@@ -2122,8 +2146,8 @@ class Tuple(Field):
     values = None
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a tuple'),
-        Error('length', 'invalid length', '%(field)s must contain exactly %(length)d values'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a tuple'),
+        FieldError('length', 'invalid length', '%(field)s must contain exactly %(length)d values'),
     ]
 
     def __init__(self, values=None, **params):
@@ -2322,7 +2346,7 @@ class UUID(Field):
     pattern = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a UUID')
+        FieldError('invalid', 'invalid value', '%(field)s must be a UUID')
     ]
 
     def __init__(self, **params):
@@ -2361,5 +2385,5 @@ Errors = Tuple((
     description='A two-tuple containing the errors for this request.'
 )
 
-__all__ = ['INCOMING', 'OUTGOING', 'Field', 'Errors', 'Error',
+__all__ = ['INCOMING', 'OUTGOING', 'Field', 'Errors', 'FieldError',
     'Undefined'] + construct_all_list(locals(), Field)

@@ -77,8 +77,13 @@ class StructuralError(SchemeError):
         else:
             structure = None
 
-        self._serialized_errors = [errors, structure]
+        self._serialized_errors = (errors, structure)
         return self._serialized_errors
+
+    @classmethod
+    def unserialize(cls, value):
+        errors, structure = value
+        return cls(*errors, **{'structure': structure})
 
     def _format_errors(self, errors):
         field = self.field

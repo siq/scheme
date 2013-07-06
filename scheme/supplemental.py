@@ -3,7 +3,7 @@ from string import whitespace
 from types import ModuleType
 
 from scheme.exceptions import *
-from scheme.fields import Field, Error, Text
+from scheme.fields import Field, FieldError, Text
 from scheme.util import construct_all_list, identify_object, import_object
 
 __all__ = ('Email',)
@@ -24,8 +24,8 @@ class Email(Text):
     """A field for one or more email addresses, separated by whitespace, commas, semicolons
     or colons."""
 
-    single_errors = [Error('pattern', 'invalid value', '%(field)s must be a valid email address')]
-    multiple_errors = [Error('pattern', 'invalid value', '%(field)s must be a list of valid email addresses')]
+    single_errors = [FieldError('pattern', 'invalid value', '%(field)s must be a valid email address')]
+    multiple_errors = [FieldError('pattern', 'invalid value', '%(field)s must be a list of valid email addresses')]
     parameters = {'extended': False, 'multiple': False, 'strip': False}
 
     def __init__(self, multiple=False, extended=False, pattern=None, strip=None, errors=None, **params):
@@ -60,8 +60,8 @@ class ObjectReference(Field):
     """A resource field for references to python objects."""
 
     errors = [
-        Error('invalid', 'invalid value', '%(field)s must be a python object'),
-        Error('import', 'object import', '%(field)s specifies %(value)r, which cannot be imported'),
+        FieldError('invalid', 'invalid value', '%(field)s must be a python object'),
+        FieldError('import', 'object import', '%(field)s specifies %(value)r, which cannot be imported'),
     ]
 
     def get_default(self):
@@ -85,7 +85,7 @@ class Url(Text):
     """A resource field for urls."""
 
     errors = [
-        Error('pattern', 'invalid value', '%(field)s must be a valid URL')
+        FieldError('pattern', 'invalid value', '%(field)s must be a valid URL')
     ]
     pattern = re.compile('(?i)'
         r'^(?:([^:]+)://)?'

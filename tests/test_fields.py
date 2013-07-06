@@ -342,6 +342,18 @@ class TestEnumeration(FieldTestCase):
         self.assert_interpolated(field, None, 'alpha', 'beta')
         self.assert_interpolated(field, ('${value}', 'alpha'), value='alpha')
 
+class TestError(FieldTestCase):
+    def test_processing(self):
+        field = Error()
+        error = {'token': 'invalid', 'message': 'testing'}
+
+        serialized = field.process(ValidationError(error), OUTGOING, True)
+        self.assertEqual(serialized, ([error], None))
+
+        unserialized = field.process(serialized, INCOMING, True)
+        self.assertIsInstance(unserialized, StructuralError)
+        self.assertEqual(unserialized.errors[0], error)
+
 class TestFloat(FieldTestCase):
     def test_specification(self):
         self.assertRaises(SchemeError, lambda:Float(minimum=True))
