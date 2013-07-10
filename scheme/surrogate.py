@@ -26,6 +26,17 @@ class surrogate(dict):
 
     @classmethod
     def construct(cls, implementation, value=None, strict=False, **params):
+        """Constructs a surrogate instance from ``value``, using the surrogate type
+        indicated by ``implementation``.
+
+        :param string implementation: The full module and class path to a surrogate
+            subclass, indicating the type of surrogate to construct.
+
+        :param value: Optional, default is ``None``; if specified, can either be a
+            ``dict`` or object instance from which to 
+        """
+
+
         if isinstance(implementation, basestring):
             implementation = cls._get_implementation(implementation)
 
