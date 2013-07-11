@@ -270,7 +270,7 @@ class Yaml(Format):
         content = cls._serialize_value(value, 0)
         if isinstance(content, list):
             content = '\n'.join(content)
-        return content
+        return content + '\n'
 
     @classmethod
     def unserialize(cls, value):
