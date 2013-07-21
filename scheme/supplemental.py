@@ -46,6 +46,14 @@ class Email(Text):
         self.multiple = multiple
         super(Email, self).__init__(errors=errors, strip=False, pattern=pattern, **params)
 
+    def __repr__(self):
+        aspects = []
+        if self.multiple:
+            aspects.append('multiple=True')
+        if self.extended:
+            aspects.append('extended=True')
+        return super(Email, self).__repr__(aspects)
+
     def preprocessor(self, value):
         if self.extended:
             return value

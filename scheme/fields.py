@@ -207,7 +207,7 @@ class Field(object):
             if attr[0] != '_' and value is not None:
                 self.aspects[attr] = value
 
-    def __repr__(self, params=None, structure=None):
+    def __repr__(self, params=None):
         aspects = []
         if self.name:
             aspects.append('name=%r' % self.name)
@@ -221,10 +221,10 @@ class Field(object):
             aspects.append('nonnull=True')
         if self.required:
             aspects.append('required=True')
+        if self.ignore_null:
+            aspects.append('ignore_null=True')
         if self.title:
             aspects.append('title=%r' % self.name)
-        if structure:
-            aspects.append(structure)
         return '%s(%s)' % (type(self).__name__, ', '.join(aspects))
 
     def __deepcopy__(self, memo):
@@ -548,6 +548,14 @@ class Binary(Field):
         else:
             raise SchemeError('max_length must be an integer >= 0, if specified')
 
+    def __repr__(self):
+        aspects = []
+        if self.min_length is not None:
+            aspects.append('min_length=%r' % self.min_length)
+        if self.max_length is not None:
+            aspects.append('max_length=%r' % self.max_length)
+        return super(Binary, self).__repr__(aspects)
+
     def _serialize_value(self, value):
         return urlsafe_b64encode(str(value))
 
@@ -598,7 +606,6 @@ class Date(Field):
     :param maximum: Optional, default is ``None``; the latest valid value for this field, as
         either a ``date`` or a callable which returns a ``date``.
     """
-
 
     basetype = 'date'
     equivalent = date
@@ -711,6 +718,8 @@ class DateTime(Field):
             aspects.append('minimum=%r' % self.minimum)
         if self.maximum is not None:
             aspects.append('maximum=%r' % self.maximum)
+        if self.utc is True:
+            aspects.append('utc=True')
         return super(DateTime, self).__repr__(aspects)
 
     def _normalize_value(self, value):
@@ -783,9 +792,9 @@ class Decimal(Field):
     def __repr__(self):
         aspects = []
         if self.minimum is not None:
-            aspects.append('minimum=%s' % self.minimum)
+            aspects.append('minimum=%r' % self.minimum)
         if self.maximum is not None:
-            aspects.append('maximum=%s' % self.maximum)
+            aspects.append('maximum=%r' % self.maximum)
         return super(Decimal, self).__repr__(aspects)
 
     def _serialize_value(self, value):
@@ -907,6 +916,9 @@ class Enumeration(Field):
         self.ignored_values = ignored_values
         self.representation = ', '.join([repr(value) for value in enumeration])
 
+    def __repr__(self):
+        return super(Enumeration, self).__repr__(['enumeration=[%s]' % self.representation])
+
     def interpolate(self, subject, parameters, interpolator=None):
         if subject is None or subject in self.enumeration:
             return subject
@@ -916,9 +928,6 @@ class Enumeration(Field):
             return value
         else:
             raise ValueError(subject)
-
-    def __repr__(self):
-        return super(Enumeration, self).__repr__(['enumeration=[%s]' % self.representation])
 
     def _is_null(self, value, ancestry):
         ignored_values = self.ignored_values
@@ -1145,6 +1154,16 @@ class Map(Field):
         if self.required_keys is not None and not isinstance(self.required_keys, (list, tuple)):
             raise SchemeError('Map(required_keys) must be a list of strings')
 
+    def __repr__(self):
+        aspects = []
+        if self.key:
+            aspects.append('key=%r' % self.key)
+
+        aspects.append('value=%r' % self.value)
+        if self.required_keys:
+            aspects.append('required_keys=%r' % sorted(self.required_keys))
+        return super(Map, self).__repr__(aspects)
+
     def describe(self, parameters=None, verbose=False):
         if not isinstance(self.value, Field):
             raise SchemeError()
@@ -1335,6 +1354,16 @@ class Sequence(Field):
         else:
             raise SchemeError('Sequence.max_length must be an integer if specified')
 
+    def __repr__(self):
+        aspects = ['item=%r' % self.item]
+        if self.min_length is not None:
+            aspects.append('min_length=%r' % self.min_length)
+        if self.max_length is not None:
+            aspects.append('max_length=%r' % self.max_length)
+        if self.unique is True:
+            aspects.append('unique=True')
+        return super(Sequence, self).__repr__(aspects)
+
     def describe(self, parameters=None, verbose=False):
         if not isinstance(self.item, Field):
             raise SchemeError()
@@ -1524,6 +1553,16 @@ class Structure(Field):
 
         if generate_default and not self.default:
             self.default = self.generate_default()
+
+    def __repr__(self):
+        aspects = ['structure=%r' % self.structure]
+        if self.polymorphic_on:
+            aspects.append('polymorphic_on=%r' % self.polymorphic_on.name)
+        if not self.strict:
+            aspects.append('strict=False')
+        if self.key_order:
+            aspects.append('key_order=%r' % self.key_order)
+        return super(Structure, self).__repr__(aspects)
 
     @property
     def has_required_fields(self):
@@ -1904,6 +1943,12 @@ class Surrogate(Field):
         else:
             self.surrogates = None
 
+    def __repr__(self):
+        aspects = []
+        if self.surrogates:
+            aspects.append('surrogates=%r' % sorted(self.surrogates))
+        return super(Surrogate, self).__repr__(aspects)
+
     def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return None
@@ -1999,6 +2044,8 @@ class Text(Field):
             aspects.append('max_length=%r' % self.max_length)
         if self.pattern is not None:
             aspects.append('pattern=%r' % self.pattern.pattern)
+        if not self.strip:
+            aspects.append('strip=False')
         return super(Text, self).__repr__(aspects)
 
     def interpolate(self, subject, parameters, interpolator=None):
@@ -2121,6 +2168,12 @@ class Token(Field):
         super(Token, self).__init__(**params)
         self.segments = segments
 
+    def __repr__(self):
+        aspects = []
+        if self.segments is not None:
+            aspects.append('segments=%r' % self.segments)
+        return super(Token, self).__repr__(aspects)
+
     def interpolate(self, subject, parameters, interpolator=None):
         if subject is None:
             return subject
@@ -2171,6 +2224,9 @@ class Tuple(Field):
                 raise SchemeError('tuple values must be Field instances')
 
         self.values = tuple(stack)
+
+    def __repr__(self):
+        return super(Tuple, self).__repr__(['values=%r' % (self.values,)])
 
     def describe(self, parameters=None, verbose=False):
         values = []
