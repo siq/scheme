@@ -1289,17 +1289,23 @@ class Object(Field):
         return self.default
 
     def _serialize_value(self, value):
-        return identify_object(value)
+        if isinstance(value, basestring):
+            return value
+
+        try:
+            return identify_object(value)
+        except TypeError:
+            raise InvalidTypeError(field=self, value=value).construct('invalid')
 
     def _unserialize_value(self, value, ancestry):
-        if isinstance(value, basestring):
-            try:
-                return import_object(value)
-            except ImportError:
-                error = ValidationError(identity=ancestry, field=self, value=value)
-                raise error.construct('import', value=value).capture()
-        else:
+        if not isinstance(value, basestring):
             return value
+
+        try:
+            return import_object(value)
+        except ImportError:
+            error = ValidationError(identity=ancestry, field=self, value=value)
+            raise error.construct('import', value=value).capture()
 
 class Sequence(Field):
     """A resource field for sequences of items.
