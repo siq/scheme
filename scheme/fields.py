@@ -929,6 +929,17 @@ class Enumeration(Field):
         else:
             raise ValueError(subject)
 
+    def redefine_enumeration(self, enumeration, strategy='append'):
+        if isinstance(enumeration, basestring):
+            enumeration = enumeration.split(' ')
+        if strategy == 'append':
+            baseline = self.enumeration
+        elif strategy == 'replace':
+            baseline = []
+
+        self.enumeration = list(set(baseline + enumeration))
+        self.representation = ', '.join([repr(value) for value in self.enumeration])
+
     def _is_null(self, value, ancestry):
         ignored_values = self.ignored_values
         if ignored_values and value in ignored_values:
