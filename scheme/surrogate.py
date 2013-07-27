@@ -105,6 +105,7 @@ class surrogate(dict):
 
     @classmethod
     def unserialize(cls, value, ancestry=None):
+        value = dict(value)
         implementation = cls._get_implementation(value.pop('_', None))
         if '__schema__' in value:
             return implementation._unserialize_dynamic_surrogate(value, ancestry)
