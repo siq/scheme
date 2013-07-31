@@ -2053,8 +2053,9 @@ class Text(Field):
         else:
             raise SchemeError('TextField.max_length must be an integer >= 0, if specified')
 
-    def __repr__(self):
-        aspects = []
+    def __repr__(self, aspects=None):
+        if not aspects:
+            aspects = []
         if self.min_length is not None:
             aspects.append('min_length=%r' % self.min_length)
         if self.max_length is not None:
