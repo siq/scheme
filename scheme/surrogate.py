@@ -13,29 +13,23 @@ class surrogate(dict):
 
     __metaclass__ = SurrogateMeta
     cache = {}
-    schema = None
+    schemas = None
 
-    def __init__(self, value, schema=None):
+    def __init__(self, value, schema=None, version=None):
         super(surrogate, self).__init__(value)
-        self._dynamic_schema = schema
+        self.schema = schema
+        self.version = version
 
     def __repr__(self):
         return '%s(%s)' % (self.surrogate, super(surrogate, self).__repr__())
 
-    @property
-    def effective_schema(self):
-        return self._dynamic_schema or self.schema
-
     @classmethod
-    def construct(cls, implementation=None, value=None, schema=None, strict=False, **params):
+    def construct(cls, implementation=None, value=None, schema=None, version=None, **params):
         """Constructs a surrogate instance from ``value``, using the surrogate type
         indicated by ``implementation``.
 
         :param string implementation: The full module and class path to a surrogate
             subclass, indicating the type of surrogate to construct.
-
-        :param value: Optional, default is ``None``; if specified, can either be a
-            ``dict`` or object instance from which to 
         """
 
         if implementation is None:
@@ -43,20 +37,25 @@ class surrogate(dict):
         if isinstance(implementation, basestring):
             implementation = cls._get_implementation(implementation)
 
-        surrogate_schema = schema
-        if surrogate_schema:
-            if implementation.schema:
+        effective_schema = schema
+        if effective_schema:
+            if implementation.schemas:
                 raise Exception('cannot specify dynamic schema for surrogate with inherent schema')
-        else:
-            surrogate_schema = implementation.schema
+        elif implementation.schemas:
+            if version is None:
+                version = len(implementation.schemas)
+            try:
+                effective_schema = implementation.schemas[version - 1]
+            except IndexError:
+                raise Exception('invalid surrogate version')
 
         if value is not None:
             if isinstance(value, dict):
                 value = dict(value)
-                if surrogate_schema:
-                    value = surrogate_schema.extract(value)
-            elif not strict and surrogate_schema:
-                value = surrogate_schema.extract(value, strict=False)
+                if effective_schema:
+                    value = effective_schema.extract(value)
+            elif effective_schema:
+                value = effective_schema.extract(value, strict=False)
             else:
                 raise ValueError(value)
             if params:
@@ -66,52 +65,49 @@ class surrogate(dict):
         else:
             raise ValueError(value)
 
-        implementation.contribute(value)
-        return implementation(value, schema)
+        implementation.contribute(value, version)
+        return implementation(value, schema, version)
 
     @classmethod
-    def contribute(cls, value):
+    def contribute(cls, value, version):
         pass
 
     @classmethod
     def interpolate(cls, value, parameters, interpolator=None):
         implementation = cls._get_implementation(value.pop('_', None))
         if '__schema__' in value:
-            schema = scheme.Field.reconstruct(value.pop('__schema__'))
-            if schema:
-                value = schema.interpolate(value, parameters, interpolator)
-                return implementation(value, schema)
-            else:
-                raise ValueError(value)
-        elif implementation.schema:
-            value = implementation.schema.interpolate(value, parameters, interpolator)
-            return implementation(value)
+            return implementation._interpolate_dynamic_surrogate(value, parameters, interpolator)
+        elif implementation.schemas:
+            return implementation._interpolate_versioned_surrogate(value, parameters, interpolator)
         else:
-            return implementation(value)
+            raise ValueError(value)
 
     def serialize(self):
         """Serializes this surrogate."""
 
         value = dict(self)
-        if self._dynamic_schema:
-            value = self._dynamic_schema.serialize(value)
-        elif self.schema:
+        if self.schema:
             value = self.schema.serialize(value)
+            value['__schema__'] = self.schema.describe()
+        elif self.schemas:
+            value = self.schemas[self.version - 1].serialize(value)
+            if self.version > 1:
+                value['__version__'] = self.version
 
         value['_'] = self.surrogate
-        if self._dynamic_schema:
-            value['__schema__'] = self._dynamic_schema.describe()
         return value
 
     @classmethod
     def unserialize(cls, value, ancestry=None):
         value = dict(value)
         implementation = cls._get_implementation(value.pop('_', None))
+
         if '__schema__' in value:
             return implementation._unserialize_dynamic_surrogate(value, ancestry)
-        elif implementation.schema:
-            value = implementation.schema.unserialize(value, ancestry=ancestry)
-        return implementation(value)
+        elif implementation.schemas:
+            return implementation._unserialize_versioned_surrogate(value, ancestry)
+        else:
+            return implementation(value)
 
     @classmethod
     def _get_implementation(cls, token):
@@ -129,6 +125,31 @@ class surrogate(dict):
         return implementation
 
     @classmethod
+    def _interpolate_dynamic_surrogate(cls, value, parameters, interpolator):
+        schema = scheme.Field.reconstruct(value.pop('__schema__'))
+        if not schema:
+            raise ValueError(value)
+
+        value = schema.interpolate(value, parameters, interpolator)
+        cls.contribute(value, None)
+        return implementation(value, schema)
+
+    @classmethod
+    def _interpolate_versioned_surrogate(cls, value, parameters, interpolator):
+        version = value.pop('__version__', None)
+        if version is None:
+            version = len(cls.schemas)
+
+        try:
+            schema = cls.schemas[version - 1]
+        except IndexError:
+            raise ValueError(value)
+
+        value = schema.interpolate(value, parameters, interpolator)
+        cls.contribute(value, version)
+        return cls(value, version=version)
+
+    @classmethod
     def _unserialize_dynamic_surrogate(cls, value, ancestry=None):
         schema = value.pop('__schema__', None)
         if not schema:
@@ -140,3 +161,14 @@ class surrogate(dict):
 
         value = schema.unserialize(value, ancestry=ancestry)
         return cls(value, schema)
+
+    @classmethod
+    def _unserialize_versioned_surrogate(cls, value, ancestry=None):
+        version = value.pop('__version__', 1)
+        try:
+            schema = cls.schemas[version - 1]
+        except IndexError:
+            raise ValueError(value)
+
+        value = schema.unserialize(value, ancestry=ancestry)
+        return cls(value, version=version)

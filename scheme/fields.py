@@ -1973,9 +1973,10 @@ class Surrogate(Field):
             subject = interpolate_parameters(subject, parameters, interpolator, True)
         if isinstance(subject, surrogate):
             return subject
-        if not isinstance(subject, dict):
+        if isinstance(subject, dict):
+            return surrogate.interpolate(subject, parameters, interpolator)
+        else:
             raise ValueError(subject)
-        return surrogate.interpolate(subject, parameters, interpolator)
 
     def _serialize_value(self, value):
         return value.serialize()
