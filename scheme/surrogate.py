@@ -151,7 +151,7 @@ class surrogate(dict):
 
         value = schema.interpolate(value, parameters, interpolator)
         cls.contribute(value, None)
-        return implementation(value, schema)
+        return cls(value, schema)
 
     @classmethod
     def _interpolate_versioned_surrogate(cls, value, parameters, interpolator):
