@@ -1230,7 +1230,10 @@ class Map(Field):
         interpolation = {}
 
         for key, value in subject.iteritems():
-            interpolation[key] = definition.interpolate(value, parameters, interpolator)
+            try:
+                interpolation[key] = definition.interpolate(value, parameters, interpolator)
+            except UndefinedValueError:
+                continue
         return interpolation
         
     def process(self, value, phase=INCOMING, serialized=False, ancestry=None):
