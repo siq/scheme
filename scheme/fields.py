@@ -319,7 +319,7 @@ class Field(object):
 
         return description
 
-    def extract(self, subject, **params):
+    def extract(self, subject, strict=True, **params):
         """Attempts to extract a valid value for this field from ``subject``, using the
         ``extractor`` callback of this field."""
 
@@ -1190,7 +1190,7 @@ class Map(Field):
             params['key'] = self.key.describe(parameters, verbose)
         return super(Map, self).describe(parameters, verbose, **params)
 
-    def extract(self, subject, **params):
+    def extract(self, subject, strict=True, **params):
         if params and not self.screen(**params):
             raise FieldExcludedError(self)
 
@@ -1205,7 +1205,7 @@ class Map(Field):
         extraction = {}
         for key, value in subject.iteritems():
             try:
-                extraction[key] = definition.extract(value, **params)
+                extraction[key] = definition.extract(value, strict, **params)
             except FieldExcludedError:
                 pass
         return extraction
@@ -1395,7 +1395,7 @@ class Sequence(Field):
         return super(Sequence, self).describe(parameters, verbose, 
             item=self.item.describe(parameters, verbose), default=default)
 
-    def extract(self, subject, **params):
+    def extract(self, subject, strict=True, **params):
         if params and not self.screen(**params):
             raise FieldExcludedError(self)
 
@@ -1410,7 +1410,7 @@ class Sequence(Field):
         extraction = []
         for item in subject:
             try:
-                extraction.append(definition.extract(item, **params))
+                extraction.append(definition.extract(item, strict, **params))
             except FieldExcludedError:
                 pass
         return extraction
@@ -1673,7 +1673,7 @@ class Structure(Field):
                 continue
 
             try:
-                extraction[name] = field.extract(value, **params)
+                extraction[name] = field.extract(value, strict, **params)
             except FieldExcludedError:
                 pass
 
@@ -2267,7 +2267,7 @@ class Tuple(Field):
 
         return super(Tuple, self).describe(parameters, verbose, values=values, default=default)
 
-    def extract(self, subject, **params):
+    def extract(self, subject, strict=True, **params):
         if params and not self.screen(**params):
             raise FieldExcludedError(self)
 
@@ -2281,7 +2281,7 @@ class Tuple(Field):
         extraction = []
         for i, definition in enumerate(self.values):
             try:
-                extraction.append(definition.extract(subject[i], **params))
+                extraction.append(definition.extract(subject[i], strict, **params))
             except FieldExcludedError:
                 pass
         return tuple(extraction)
