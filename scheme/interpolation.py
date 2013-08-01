@@ -82,7 +82,10 @@ class Interpolator(object):
 
     def evaluate(self, subject, parameters):
         expression = self.environment.compile_expression(subject, False)
-        value = expression(**parameters)
+        try:
+            value = expression(**parameters)
+        except jinja2.UndefinedError:
+            raise UndefinedValueError()
         if isinstance(value, self.environment.undefined):
             raise UndefinedValueError()
         return value
