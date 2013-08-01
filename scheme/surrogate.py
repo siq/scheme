@@ -24,6 +24,21 @@ class surrogate(dict):
         return '%s(%s)' % (self.surrogate, super(surrogate, self).__repr__())
 
     @classmethod
+    def acquire(cls, implementation, version=None, **params):
+        if isinstance(implementation, basestring):
+            implementation = cls._get_implementation(implementation)
+        if not implementation.schemas:
+            raise ValueError(implementation)
+        if version is None:
+            version = len(implementation.schemas)
+
+        value = implementation._acquire_surrogate(version, **params)
+        if isinstance(value, cls):
+            return value
+        else:
+            return cls.construct(implementation, value, version=version)
+
+    @classmethod
     def construct(cls, implementation=None, value=None, schema=None, version=None, **params):
         """Constructs a surrogate instance from ``value``, using the surrogate type
         indicated by ``implementation``.
@@ -108,6 +123,10 @@ class surrogate(dict):
             return implementation._unserialize_versioned_surrogate(value, ancestry)
         else:
             return implementation(value)
+
+    @classmethod
+    def _acquire_surrogate(cls, version, **params):
+        raise NotImplementedError()
 
     @classmethod
     def _get_implementation(cls, token):
