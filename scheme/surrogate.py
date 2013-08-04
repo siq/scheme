@@ -89,6 +89,7 @@ class surrogate(dict):
 
     @classmethod
     def interpolate(cls, value, parameters, interpolator=None):
+        value = dict(value)
         implementation = cls._get_implementation(value.pop('_', None))
         if '__schema__' in value:
             return implementation._interpolate_dynamic_surrogate(value, parameters, interpolator)
