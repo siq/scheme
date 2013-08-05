@@ -1,4 +1,5 @@
 import scheme
+from copy import deepcopy
 from scheme.interpolation import interpolate_parameters
 from scheme.util import identify_object, import_object
 
@@ -146,7 +147,7 @@ class surrogate(dict):
 
     @classmethod
     def _interpolate_dynamic_surrogate(cls, value, parameters, interpolator):
-        schema = scheme.Field.reconstruct(value.pop('__schema__'))
+        schema = scheme.Field.reconstruct(deepcopy(value.pop('__schema__')))
         if not schema:
             raise ValueError(value)
 
