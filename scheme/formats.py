@@ -366,7 +366,7 @@ class Yaml(Format):
             return "'%s'" % value
 
         indent = cls.indent * level
-        if cls._is_literal_text(value):
+        if '\n' in value:
             lines = ['|']
             for line in value.split('\n'):
                 if line:
