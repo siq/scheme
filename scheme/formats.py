@@ -118,7 +118,8 @@ class StructuredText(Format):
     name = 'structuredtext'
 
     STRUCTURE_EXPR = re.compile(
-        r'(?:\{((\\[\[\]\{\}])|[^\\{\[\]])*?\})|(?:\[((\\[\[\]\{\}])|[^\\{}\[])*?\])')
+        r'(?:\{((\\[\\\[\]\{\}])|[^\\{\[\]])*?\})|(?:\[((\\[\\\[\]\{\}])|[^\\{}\[])*?\])'
+    )
     STRUCTURE_TOKENS_EXPR = re.compile(r'([{}\[\]])')
     ESCAPED_TOKENS_EXPR = re.compile(r'\\([{}\[\]])')
 
