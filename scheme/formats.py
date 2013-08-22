@@ -117,7 +117,10 @@ class StructuredText(Format):
     mimetype = 'text/plain'
     name = 'structuredtext'
 
-    STRUCTURE_EXPR = re.compile(r'(?:\{[^{\[\]]*?\})|(?:\[[^{}\[]*?\])')
+    STRUCTURE_EXPR = re.compile(
+        r'(?:\{((\\[\[\]\{\}])|[^\\{\[\]])*?\})|(?:\[((\\[\[\]\{\}])|[^\\{}\[])*?\])')
+    STRUCTURE_TOKENS_EXPR = re.compile(r'([{}\[\]])')
+    ESCAPED_TOKENS_EXPR = re.compile(r'\\([{}\[\]])')
 
     @classmethod
     def serialize(cls, value):
@@ -148,6 +151,8 @@ class StructuredText(Format):
             return content and 'true' or 'false'
         elif content is None:
             return 'null'
+        elif isinstance(content, basestring):
+            return cls.STRUCTURE_TOKENS_EXPR.sub(r'\\\1', content)
         else:
             return str(content)
 
@@ -186,7 +191,7 @@ class StructuredText(Format):
             else:
                 return []
         else:
-            raise ValueError(value)
+            raise ValueError(text)
 
     @classmethod
     def _unserialize_structured_value(cls, text, parse_numbers=False):
@@ -213,7 +218,7 @@ class StructuredText(Format):
         elif candidate == 'null':
             return None
         elif not parse_numbers:
-            return value
+            return cls.ESCAPED_TOKENS_EXPR.sub(r'\1', value)
 
         if '.' in value:
             try:

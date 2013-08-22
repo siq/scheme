@@ -46,6 +46,27 @@ class TestStructuredText(TestCase):
         self.assertEqual(StructuredText.unserialize('1', True), 1)
         self.assertEqual(StructuredText.unserialize('{b:1.2}', True), {'b': 1.2})
 
+    def test_parsing_escape_characters(self):
+        self.assert_correct([
+            ('{', '\{'),
+            ('}', '\}'),
+            ('{}', '\{\}'),
+            ('{a}', '\{a\}'),
+
+            ('[', '\['),
+            (']', '\]'),
+            ('[]', '\[\]'),
+            ('[a]', '\[a\]'),
+
+            ({'b': '{}'}, '{b:\{\}}'),
+            ({'b': '[]'}, '{b:\[\]}'),
+            ({'a': '[]', 'b': '{}', 'c': '1', 'd': [], 'e': {}}, '{a:\[\],b:\{\},c:1,d:[],e:{}}'),
+
+            (['{}'], '[\{\}]'),
+            (['[]'], '[\[\]]'),
+            (['{}', '[]', 'b', [], {}], '[\{\},\[\],b,[],{}]'),
+        ])
+
 SINGLE_DICT = """a: 1
 b: true
 c: something"""
@@ -171,4 +192,13 @@ class TestUrlEncoded(TestCase):
             ({'a': {'b': {}}}, 'a={b:{}}'),
             ({'a': ['1', '2', ['3', []]]}, 'a=[1,2,[3,[]]]'),
             ({'a': [True, {'b': [False, '1']}]}, 'a=[true,{b:[false,1]}]'),
+        ])
+
+    def test_escaped_characters(self):
+        self.assert_correct([
+            ({'a': {'b': '{}'}}, 'a={b:\{\}}'),
+            ({'a': '{b:c}'}, 'a=\{b:c\}'),
+            ({'a': ['1', '2', ['3', '[]']]}, 'a=[1,2,[3,\[\]]]'),
+            ({'a': ['1', '2', '[', '4']}, 'a=[1,2,\[,4]'),
+            ({'a': ['{}', {}, '[]', []]}, 'a=[\{\},{},\[\],[]]'),
         ])
