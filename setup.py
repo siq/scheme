@@ -9,6 +9,11 @@ except Exception:
 else:
     VERSION = revision
 
+try:
+    VERSION = os.environ['INTERNAL_VERSION']
+except:
+    pass
+
 setup(
     name='scheme',
     version=VERSION,
