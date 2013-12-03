@@ -162,6 +162,7 @@ class Field(object):
     errors = [
         FieldError('invalid', 'invalid value', '%(field)s is an invalid value'),
         FieldError('nonnull', 'null value', '%(field)s must be a non-null value'),
+        FieldError('overflow', 'overflow error', '%(field)s overflowed'),
     ]
 
     def __init__(self, name=None, description=None, default=None, nonnull=False,
@@ -416,7 +417,10 @@ class Field(object):
             value = candidate
 
         if serialized and phase == OUTGOING:
-            value = self._serialize_value(value)
+            try:
+                value = self._serialize_value(value)
+            except OverflowError:
+                raise ValidationError(identity=ancestry, field=self, value=value).construct('overflow')
 
         return value
 
