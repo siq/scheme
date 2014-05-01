@@ -450,6 +450,13 @@ class Field(object):
             value = Format.formats[format].serialize(value, **params)
         return value
 
+    def transform(self, transformer):
+        candidate = transformer(self)
+        if isinstance(candidate, Field):
+            return candidate
+        else:
+            return self
+
     def unserialize(self, value, format=None, ancestry=None, **params):
         """Unserializes ``value`` from ``format``, if specified, before processing
         it as an incoming value for this field."""
@@ -1283,6 +1290,19 @@ class Map(Field):
 
         return map
 
+    def transform(self, transformer):
+        candidate = transformer(self)
+        if isinstance(candidate, Field):
+            return candidate
+        elif candidate is False:
+            return self
+
+        candidate = self.value.transform(transformer)
+        if candidate is self.value:
+            return self
+        else:
+            return self.clone(value=candidate)
+
     def _define_undefined_field(self, field):
         self.value = field
 
@@ -1488,6 +1508,19 @@ class Sequence(Field):
             raise ValidationError(identity=ancestry, field=self, value=value).construct('duplicate')
         else:
             return sequence
+
+    def transform(self, transformer):
+        candidate = transformer(self)
+        if isinstance(candidate, Field):
+            return candidate
+        elif candidate is False:
+            return self
+
+        candidate = self.item.transform(transformer)
+        if candidate is self.item:
+            return self
+        else:
+            return self.clone(item=candidate)
 
     def _define_undefined_field(self, field):
         self.item = field
@@ -1848,6 +1881,47 @@ class Structure(Field):
             return structure
         else:
             raise ValidationError(identity=ancestry, field=self, value=value, structure=structure)
+
+    def replace(self, structure):
+        for name in structure:
+            if name in self.structure:
+                break
+        else:
+            return self
+
+        replacement = self.clone()
+        for name, field in structure.iteritems():
+            if not isinstance(field, Field):
+                raise TypeError(field)
+            if field.name != name:
+                field.name = name
+            if name in replacement.structure:
+                replacement.structure[name] = field
+
+        return replacement
+
+    def transform(self, transformer):
+        candidate = transformer(self)
+        if isinstance(candidate, Field):
+            return candidate
+        elif candidate is False:
+            return self
+
+        transformed = False
+        candidates = {}
+
+        for name, field in self.structure.iteritems():
+            candidate = field.transform(transformer)
+            if candidate is not field:
+                candidates[name] = candidate
+                transformed = True
+            else:
+                candidates[name] = field
+
+        if transformed:
+            return self.clone(structure=candidates)
+        else:
+            return self
 
     def _define_undefined_field(self, field, name):
         identity, name = name
@@ -2343,6 +2417,29 @@ class Tuple(Field):
             return tuple(sequence)
         else:
             raise ValidationError(identity=ancestry, field=self, value=value, structure=sequence)
+
+    def transform(self, transformer):
+        candidate = transformer(self)
+        if isinstance(candidate, Field):
+            return candidate
+        elif candidate is False:
+            return self
+
+        transformed = False
+        candidates = []
+
+        for i, field in enumerate(self.values):
+            candidate = field.transform(transformer)
+            if candidate is not field:
+                candidates.append(candidate)
+                transformed = True
+            else:
+                candidates.append(field)
+
+        if transformed:
+            return self.clone(values=tuple(candidates))
+        else:
+            return self
 
     def _define_undefined_field(self, field, idx):
         self.values = tuple(list(self.values[:idx]) + [field] + list(self.values[idx + 1:]))

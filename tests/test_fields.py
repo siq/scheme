@@ -672,6 +672,32 @@ class TestSequence(FieldTestCase):
         self.assert_interpolated(field, ('${value}', [1, 2]), value=['${alpha}', '${beta}'],
             alpha=1, beta=2)
 
+    def test_transform(self):
+        def transformer(field):
+            if field.name == 'stop':
+                return False
+            if field.name == 'testing':
+                return Field(name='testing')
+
+        field = Sequence(Integer())
+        transformed = field.transform(transformer)
+
+        self.assertIs(field, transformed)
+        self.assertIs(field.item, transformed.item)
+
+        field = Sequence(Integer(), name='testing')
+        transformed = field.transform(transformer)
+
+        self.assertIsNot(field, transformed)
+        self.assertEqual(transformed.type, 'field')
+
+        field = Sequence(Integer(name='testing'))
+        transformed = field.transform(transformer)
+
+        self.assertIsNot(field, transformed)
+        self.assertIsInstance(transformed, Sequence)
+        self.assertEqual(transformed.item.type, 'field')
+
 class TestStructure(FieldTestCase):
     class ExtractionTarget(object):
         def __init__(self, **params):
@@ -911,7 +937,7 @@ class TestSurrogate(FieldTestCase):
         self.assertIsInstance(value, dict)
         self.assertEqual(value, {'_': 'scheme.surrogate.surrogate', 'a': 1})
 
-    def test_schema_processing(self):
+    def _test_schema_processing(self):
         field = Surrogate()
         value = {'_': surrogate_subclass.surrogate, 'id': 'alpha', 'value': 1}
 
