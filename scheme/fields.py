@@ -903,7 +903,7 @@ class Enumeration(Field):
         FieldError('invalid', 'invalid value', '%(field)s must be one of %(values)s')
     ]
 
-    def __init__(self, enumeration, ignored_values=None, **params):
+    def __init__(self, enumeration, ignored_values=None, representation=None, **params):
         super(Enumeration, self).__init__(**params)
         if isinstance(enumeration, basestring):
             enumeration = enumeration.split(' ')
