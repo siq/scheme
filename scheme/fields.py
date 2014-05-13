@@ -907,7 +907,10 @@ class Enumeration(Field):
         super(Enumeration, self).__init__(**params)
         if isinstance(enumeration, basestring):
             enumeration = enumeration.split(' ')
-        if isinstance(enumeration, list):
+
+        if self.constant:
+            enumeration = [self.constant]
+        elif isinstance(enumeration, list):
             for value in enumeration:
                 if not isinstance(value, NATIVELY_SERIALIZABLE):
                     raise SchemeError('Enumeration values must be natively serializable')
@@ -916,6 +919,7 @@ class Enumeration(Field):
 
         if isinstance(ignored_values, basestring):
             ignored_values = ignored_values.split(' ')
+
         if isinstance(ignored_values, list):
             for value in ignored_values:
                 if not isinstance(value, NATIVELY_SERIALIZABLE):
