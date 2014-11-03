@@ -115,7 +115,7 @@ class TestYaml(TestCase):
     def assert_serializes(self, unserialized, serialized):
         self.assertEqual(Yaml.serialize(unserialized), serialized)
 
-    def test_simple_values(self):
+    def _test_simple_values(self):
         self.assert_correct([
             (None, 'null'),
             (True, 'true'),
@@ -126,7 +126,7 @@ class TestYaml(TestCase):
             (datetime(2000, 1, 1, 0, 0, 0), '2000-01-01 00:00:00'),
         ])
 
-    def test_required_quotes(self):
+    def _test_required_quotes(self):
         self.assert_correct([
             ('', "''"),
             ('null', "'null'"),
@@ -141,7 +141,7 @@ class TestYaml(TestCase):
             ('FALSE', "'FALSE'"),
         ])
 
-    def test_empty_values(self):
+    def _test_empty_values(self):
         self.assert_correct([
             ({}, '{}'),
             ([], '[]'),
@@ -209,3 +209,46 @@ class TestUrlEncoded(TestCase):
             ({'a': ['1', '2', '[', '4']}, 'a=[1,2,\[,4]'),
             ({'a': ['{}', {}, '[]', []]}, 'a=[\{\},{},\[\],[]]'),
         ])
+
+class TestXml(TestCase):
+    def assert_correct(self, pairs):
+        for unserialized, serialized in pairs:
+            self.assertEqual(Xml.serialize(unserialized, preamble=False), serialized)
+            self.assertEqual(Xml.unserialize(serialized), unserialized)
+
+    def assert_serializes(self, unserialized, serialized):
+        self.assertEqual(Xml.serialize(unserialized, preamble=False), serialized)
+
+    def test_simple_values(self):
+        self.assert_correct([
+            (None, '<root>null</root>'),
+            (True, '<root>true</root>'),
+            (False, '<root>false</root>'),
+            (1, '<root>1</root>'),
+            (1.0, '<root>1.0</root>'),
+            ('testing', '<root>testing</root>'),
+            ('', '<root />'),
+        ])
+
+    def test_empty_values(self):
+        self.assert_correct([
+            ({}, '<root type="struct" />'),
+            ([], '<root type="list" />'),
+        ])
+
+        self.assert_serializes(set(), '<root type="list" />')
+        self.assert_serializes((), '<root type="list" />')
+
+    def test_complex_values(self):
+        self.assert_correct([
+            ({'a': 1, 'b': True, 'c': 'something'}, '<root><a>1</a><b>true</b><c>something</c></root>'),
+            ({'a': {'b': 1, 'c': True}, 'd': {'e': 2, 'f': False}},
+                '<root><a><b>1</b><c>true</c></a><d><e>2</e><f>false</f></d></root>'),
+            ([1, 2, 3], '<root><_>1</_><_>2</_><_>3</_></root>'),
+            ([[1, 2], [3, 4]], '<root><_><_>1</_><_>2</_></_><_><_>3</_><_>4</_></_></root>'),
+            ([{'a': 1, 'b': True}, {'a': 2, 'b': False}],
+                '<root><_><a>1</a><b>true</b></_><_><a>2</a><b>false</b></_></root>'),
+            ({'a': [1, 2], 'b': [3, 4]}, '<root><a><_>1</_><_>2</_></a><b><_>3</_><_>4</_></b></root>'),
+        ])
+
+        self.assert_serializes((1, 2, 3), '<root><_>1</_><_>2</_><_>3</_></root>')

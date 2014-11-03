@@ -27,6 +27,11 @@ try:
 except ImportError:
     yaml = None
 
+try:
+    import xml.etree.cElementTree as etree
+except ImportError:
+    etree = None
+
 from scheme.util import construct_all_list, traverse_to_key
 
 class FormatMeta(type):
@@ -458,6 +463,114 @@ class Csv(Format):
         writer.writerow(dict((name, name) for name in columns))
         writer.writerows(value)
         return content.getvalue()
+
+class Xml(Format):
+    default_root = 'root'
+    extensions = ['.xml']
+    mimetype = 'application/xml'
+    name = 'xml'
+    preamble = '<?xml version="1.0"?>\n'
+
+    @classmethod
+    def serialize(cls, value, root=None, preamble=True):
+        element = etree.Element(root or cls.default_root)
+        cls._serialize_content(value, element)
+
+        serialized = etree.tostring(element)
+        if preamble:
+            serialized = cls.preamble + serialized
+
+        return serialized
+
+    @classmethod
+    def unserialize(cls, value, ignore_root=True):
+        root = etree.fromstring(value)
+        attr, value = cls._unserialize_element(root)
+
+        if not ignore_root:
+            value = {attr: value}
+
+        return value
+
+    @classmethod
+    def _is_list(cls, candidates):
+        for attr, child in candidates:
+            if attr != '_':
+                return False
+        else:
+            return True
+
+    @classmethod
+    def _serialize_content(cls, content, element):
+        if isinstance(content, dict):
+            if content:
+                for key, value in sorted(content.iteritems()):
+                    subelement = etree.SubElement(element, key)
+                    cls._serialize_content(value, subelement)
+            else:
+                element.set('type', 'struct')
+        elif isinstance(content, (list, set, tuple)):
+            if content:
+                for value in content:
+                    subelement = etree.SubElement(element, '_')
+                    cls._serialize_content(value, subelement)
+            else:
+                element.set('type', 'list')
+        elif isinstance(content, bool):
+            if content:
+                element.text = 'true'
+            else:
+                element.text = 'false'
+        elif content is None:
+            element.text = 'null'
+        else:
+            element.text = str(content)
+
+    @classmethod
+    def _unserialize_element(cls, element):
+        attr = element.tag
+        type = element.get('type', None)
+
+        children = list(element)
+        if children:
+            children = [cls._unserialize_element(child) for child in children]
+            if type == 'list' or cls._is_list(children):
+                return attr, [child[1] for child in children]
+            else:
+                return attr, dict(children)
+
+        if not element.text:
+            if type == 'list':
+                return attr, []
+            elif type == 'struct':
+                return attr, {}
+            elif type in ('bool', 'int', 'float', 'null'):
+                return attr, None
+            else:
+                return attr, ''
+
+        if type == 'str':
+            return attr, element.text
+
+        candidate = element.text.lower()
+        if candidate == 'true':
+            return attr, True
+        elif candidate == 'false':
+            return attr, False
+        elif candidate == 'null':
+            return attr, None
+
+        value = element.text
+        if '.' in value:
+            try:
+                return attr, float(value)
+            except (TypeError, ValueError):
+                pass
+
+        try:
+            return attr, int(value)
+        except (TypeError, ValueError):
+            return attr, value
 
 def serialize(mimetype, value, **params):
     return Format.formats[mimetype].serialize(value, **params)
