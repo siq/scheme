@@ -4,6 +4,20 @@ from types import ClassType, ModuleType
 
 NODEFAULT = object()
 
+import threading
+
+class ThreadSafeDict(dict) :
+    def __init__(self, * p_arg, ** n_arg) :
+        dict.__init__(self, * p_arg, ** n_arg)
+        self._lock = threading.Lock()
+
+    def __enter__(self) :
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, type, value, traceback) :
+        self._lock.release()
+
 def abbreviate_string(value, maxlength=80):
     if len(value) <= maxlength:
         return value
