@@ -53,6 +53,7 @@ class surrogate(dict):
         if isinstance(implementation, basestring):
             implementation = cls._get_implementation(implementation)
 
+        
         effective_schema = schema
         if effective_schema:
             if implementation.schemas:

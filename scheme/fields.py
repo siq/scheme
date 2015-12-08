@@ -2003,8 +2003,9 @@ class Structure(Field):
                 else:
                     field.register(self._define_undefined_field, (identity, name))
                     continue
-
+                
             if not isinstance(field, Field):
+                print 'field.name',field
                 raise SchemeError('structure values must be Field instances')
             if not field.name:
                 field.name = name
