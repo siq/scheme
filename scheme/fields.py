@@ -2005,7 +2005,6 @@ class Structure(Field):
                     continue
                 
             if not isinstance(field, Field):
-                print 'field.name',field
                 raise SchemeError('structure values must be Field instances')
             if not field.name:
                 field.name = name
