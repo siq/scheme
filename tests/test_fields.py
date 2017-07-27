@@ -556,14 +556,14 @@ class TestSequence(FieldTestCase):
 
         field = Sequence(Integer())
         self.assert_processed(field, [1, 2, 3], [1, None, 3])
-        
+
         expected_error = ValidationError(structure=[1, INVALID_ERROR, 3])
         self.assert_not_processed(field, expected_error, [1, '', 3])
 
     def test_null_values(self):
         field = Sequence(Integer(nonnull=True))
         self.assert_processed(field, [], [1, 2, 3])
-        
+
         expected_error = ValidationError(structure=[1, NULL_ERROR, 3])
         self.assert_not_processed(field, expected_error, [1, None, 3])
 
@@ -595,7 +595,7 @@ class TestSequence(FieldTestCase):
         field = Sequence(f)
         f.define(Integer())
         self.assert_processed(field, None, [], [1], [1, 2])
-    
+
     def test_naive_extraction(self):
         field = Sequence(Integer())
         value = [1, 2, 3]
@@ -713,7 +713,7 @@ class TestStructure(FieldTestCase):
         self.assert_not_processed(field, 'invalid', True)
 
         field = Structure({'a': Integer(), 'b': Text(), 'c': Boolean()})
-        self.assert_processed(field, None, {}, {'a': None}, {'a': 1}, {'a': 1, 'b': None}, 
+        self.assert_processed(field, None, {}, {'a': None}, {'a': 1}, {'a': 1, 'b': None},
             {'a': 1, 'b': 'b', 'c': True})
 
         expected_error = ValidationError(structure={'a': INVALID_ERROR, 'b': 'b', 'c': True})
@@ -927,7 +927,7 @@ class TestSurrogate(FieldTestCase):
     def test_naive_processing(self):
         field = Surrogate()
         self.assert_processed(field, None)
-        
+
         instance = field.process({'a': 1}, INCOMING, True)
         self.assertIsInstance(instance, surrogate)
         self.assertEqual(instance, {'a': 1})
@@ -1095,7 +1095,7 @@ class TestTuple(FieldTestCase):
         field = Tuple((Text(), f, Text()))
         f.define(Integer())
         self.assert_processed(field, None, (('', 1, ''), ('', 1, '')))
-    
+
     def test_naive_extraction(self):
         field = Tuple((Integer(), Text()))
         value = (1, 'test')
@@ -1190,6 +1190,24 @@ class TestUnion(FieldTestCase):
         f.define(Integer())
         self.assert_processed(field, None, 'testing', 1, True)
         self.assert_not_processed(field, 'invalid', {}, [])
+
+    def test_complex_unions(self):
+        dt = datetime(2012, 5, 5)
+        dt_str1 = dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        dt_str2 = dt.strftime('%Y-%m-%dT')
+        dt_str3 = dt.strftime('%H:%M:%S')
+        field1 = Union(Float(), Integer(), Text(), Boolean(), Binary(), Date(), DateTime(), Decimal(), Time(), Token(), UUID())
+        field = Union(
+            field1,
+            Sequence(Union(field1, Map(field1))),
+            Map(Union(field1, Sequence(field1)))
+        )
+        self.assert_processed(field, None, 'test', 1, True, {'a': 'b'}, [1,2 ,3])
+        self.assert_processed(field, ['test', 'a'], dt_str1, dt_str2, dt_str3, [dt_str1, dt_str2])
+        self.assert_processed(field, [{'a': 'b'}, {'c':'d' }], [{'a': 2, 'aa': 22}, {'b': 'a'}])
+        self.assert_processed(field, {'a': ['aa','aaa'], 'b':['bbbb']}, {'a': [1,2], 'b': [2.3, 1.3]})
+        self.assert_processed(Map(field), None, {'test': 'test'}, {'test': 1})
+        self.assert_processed(field, 1.2, -1.343, [1.33,-3.14], 34343223, str(uuid4()))
 
 class TestUUID(FieldTestCase):
     def uuid(self):
