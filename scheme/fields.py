@@ -2468,8 +2468,6 @@ class Union(Field):
         super(Union, self).__init__(**params)
         if fields:
             self.fields = tuple(fields)
-        elif params.get('fields', ''):
-            self.fields = tuple(params.get('fields'))
         if not isinstance(self.fields, tuple) or not self.fields:
             raise SchemeError('Union.fields must be a tuple with at least one item')
 
