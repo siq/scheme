@@ -60,7 +60,7 @@ class Interpolator(object):
     standard_globals = [now, timestamp]
 
     def __init__(self, filters=None, globals=None):
-        self.environment = jinja2.Environment(
+        self.environment = jinja2.Environment( # nosec
             variable_start_string='${',
             variable_end_string='}')
 
@@ -106,7 +106,7 @@ def interpolate_parameters(subject, parameters, interpolator=None, simple=False)
         :cls:`Interpolator` instance to use for the interpolation, rather then
         the default one.
 
-    :param boolean simple: Optional, defaults to ``False``; if ``True``. 
+    :param boolean simple: Optional, defaults to ``False``; if ``True``.
     """
 
     if not isinstance(subject, basestring):
