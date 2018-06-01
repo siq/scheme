@@ -21,7 +21,7 @@ class AESCipher():
         self._keyfile = keyfile
         self._tempfile = None
 
-    def encrypt(self, plaintext):
+    def encrypt(self, plaintext, stable=False):
         result = plaintext
         log('info', 'Going to encrypt text')
         if plaintext:
@@ -41,7 +41,10 @@ class AESCipher():
                     # encrypt using default cipher, passcode (key+iv), with salt, base64-encoded results
                     # (note the passcode is generated from key+iv for backward compatibility)
                     passcode = key+iv
-                    encryptedText = pyssl.encrypt_passcode(plaintext, passcode, True)
+		    if stable:
+		        encryptedText = pyssl.encrypt_passcode(plaintext, passcode, True, use_salt=False)
+		    else:
+                    	encryptedText = pyssl.encrypt_passcode(plaintext, passcode, True)
                     # format: VVV(key version) + encryptedText
                     result = self._toHex(version>>8)[1] + self._toHex(version & 0xff) + encryptedText
                 else:
