@@ -1,5 +1,6 @@
 import os
 import re
+from xml.sax.saxutils import escape
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from copy import deepcopy
 from datetime import datetime, date, time
@@ -2115,8 +2116,9 @@ class Text(Field):
     ]
 
     def __init__(self, pattern=None, min_length=None, max_length=None, strip=True,
-            nonempty=False, **params):
+            nonempty=False, escape_html_entities=True, **params):
 
+        self.escape_html_entities = escape_html_entities
         self.strip = strip
         if nonempty:
             params.update(required=True, nonnull=True)
@@ -2183,6 +2185,8 @@ class Text(Field):
         if self.pattern and not self.pattern.match(value):
             raise ValidationError(identity=ancestry, field=self, value=value).construct('pattern')
 
+        if self.escape_html_entities:
+            value = escape(value)
         return value
 
 class Time(Field):

@@ -981,6 +981,13 @@ class TestText(FieldTestCase):
         field = Text(strip=False)
         self.assertEqual(field.process('  '), '  ')
 
+    def test_escape_html_entities(self):
+        field = Text()
+        self.assertEqual(field.process(' <script>&</script> '), '&lt;script&gt;&amp;&lt;/script&gt;')
+        self.assertEqual(field.process('abc@gmail.com <ABC>'), 'abc@gmail.com &lt;ABC&gt;') 
+        field = Text(escape_html_entities=False)
+        self.assertEqual(field.process(' <script>&</script> '), '<script>&</script>')
+
     def test_pattern(self):
         field = Text(pattern=r'^[abc]*$')
         self.assert_processed(field, '', 'a', 'ab', 'bc', 'abc', 'aabbcc')

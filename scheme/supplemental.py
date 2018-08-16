@@ -44,7 +44,7 @@ class Email(Text):
 
         self.extended = extended
         self.multiple = multiple
-        super(Email, self).__init__(errors=errors, strip=False, pattern=pattern, **params)
+        super(Email, self).__init__(errors=errors, strip=False, pattern=pattern, escape_html_entities=False, **params)
 
     def __repr__(self):
         aspects = []
