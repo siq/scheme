@@ -92,16 +92,19 @@ class ObjectReference(Field):
 class Url(Text):
     """A resource field for urls."""
 
-    errors = [
-        FieldError('pattern', 'invalid value', '%(field)s must be a valid URL')
-    ]
-    pattern = re.compile('(?i)'
-        r'^(?:([^:]+)://)?'
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'
-        r'localhost|'
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
-        r'(?::\d+)?'
-        r'(?:/?|[/?]\S+)$'
-    )
+    def __init__(self, **params):
+        errors = [
+            FieldError('pattern', 'invalid value', '%(field)s must be a valid URL')
+        ]
+        pattern = re.compile('(?i)'
+            r'^(?:([^:]+)://)?'
+            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'
+            r'localhost|'
+            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+            r'(?::\d+)?'
+            r'(?:/?|[/?]\S+)$'
+        )
+        super(Url, self).__init__(errors=errors, strip=False, pattern=pattern, escape_html_entities=False, **params)
+
 
 __all__ = construct_all_list(locals(), Field)
