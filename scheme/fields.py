@@ -2116,9 +2116,9 @@ class Text(Field):
     ]
 
     def __init__(self, pattern=None, min_length=None, max_length=None, strip=True,
-            nonempty=False, escape_html_entities=True, **params):
+            nonempty=False, **params):
 
-        self.escape_html_entities = escape_html_entities
+        self.escape_html_entities = params.get('escape_html_entities', True)
         self.strip = strip
         if nonempty:
             params.update(required=True, nonnull=True)

@@ -26,7 +26,7 @@ class Email(Text):
 
     single_errors = [FieldError('pattern', 'invalid value', '%(field)s must be a valid email address')]
     multiple_errors = [FieldError('pattern', 'invalid value', '%(field)s must be a list of valid email addresses')]
-    parameters = {'extended': False, 'multiple': False, 'strip': False}
+    parameters = {'extended': False, 'multiple': False, 'strip': False, 'escape_html_entities': False}
 
     def __init__(self, multiple=False, extended=False, pattern=None, strip=None, errors=None, **params):
         if multiple:
@@ -44,7 +44,8 @@ class Email(Text):
 
         self.extended = extended
         self.multiple = multiple
-        super(Email, self).__init__(errors=errors, strip=False, pattern=pattern, escape_html_entities=False, **params)
+        params['escape_html_entities'] = False
+        super(Email, self).__init__(errors=errors, strip=False, pattern=pattern, **params)
 
     def __repr__(self):
         aspects = []
@@ -104,7 +105,8 @@ class Url(Text):
             r'(?::\d+)?'
             r'(?:/?|[/?]\S+)$'
         )
-        super(Url, self).__init__(errors=errors, strip=False, pattern=pattern, escape_html_entities=False, **params)
+        params['escape_html_entities'] = False
+        super(Url, self).__init__(errors=errors, strip=False, pattern=pattern, **params)
 
 
 __all__ = construct_all_list(locals(), Field)
