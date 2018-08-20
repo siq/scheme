@@ -2119,6 +2119,7 @@ class Text(Field):
             nonempty=False, **params):
 
         self.escape_html_entities = params.get('escape_html_entities', True)
+        self.is_html = re.compile('<[^<]+?>')
         self.strip = strip
         if nonempty:
             params.update(required=True, nonnull=True)
@@ -2186,7 +2187,8 @@ class Text(Field):
             raise ValidationError(identity=ancestry, field=self, value=value).construct('pattern')
 
         if self.escape_html_entities:
-            value = escape(value)
+            if self.is_html.search(value):
+                value = escape(value)
         return value
 
 class Time(Field):

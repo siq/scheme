@@ -984,7 +984,12 @@ class TestText(FieldTestCase):
     def test_escape_html_entities(self):
         field = Text()
         self.assertEqual(field.process(' <script>&</script> '), '&lt;script&gt;&amp;&lt;/script&gt;')
-        self.assertEqual(field.process('abc@gmail.com <ABC>'), 'abc@gmail.com &lt;ABC&gt;') 
+        self.assertEqual(field.process('abc@gmail.com <ABC>'), 'abc@gmail.com &lt;ABC&gt;')
+        field = Text()
+        self.assertEqual(field.process(' <> '), '<>')
+        field = Text()
+        self.assertEqual(field.process('a > b '), 'a > b')
+
         field = Text(escape_html_entities=False)
         self.assertEqual(field.process(' <script>&</script> '), '<script>&</script>')
 
