@@ -1,4 +1,6 @@
+import re
 from traceback import format_exc
+from xml.sax.saxutils import escape
 
 from scheme.util import format_structure, indent
 
@@ -17,6 +19,7 @@ class StructuralError(SchemeError):
         self.structure = params.pop('structure', None)
         self.tracebacks = None
         self.value = params.pop('value', None)
+        self.is_html = re.compile('<[^<]+?>')
 
         if params and 'token' in params:
             self.errors.append(params)
@@ -149,6 +152,8 @@ class StructuralError(SchemeError):
         elif isinstance(self.structure, dict):
             errors = {}
             for attr, value in self.structure.iteritems():
+                if self.is_html.search(attr):
+                    attr = escape(attr)
                 if isinstance(value, StructuralError):
                     if value.structure is not None:
                         errors[attr] = value._serialize_structure()
@@ -163,8 +168,11 @@ class ValidationError(StructuralError):
 
     def construct(self, error, **params):
         error = self.field.errors[error]
+        msg = error.format(self.field, params)
+        if self.is_html.search(msg):
+            msg = escape(msg)
         return self.append({'token': error.token, 'title': error.title,
-            'message': error.format(self.field, params)})
+            'message': msg})
 
 class InvalidTypeError(ValidationError):
     """A validation error indicating the value being processed is invalid due
